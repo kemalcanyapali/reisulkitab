@@ -1,0 +1,327 @@
+"""The dictation chain end to end, with every outside call faked.
+
+This is the one test that says what a dictation actually does: what gets sent,
+what gets pasted, what is written to the history, and what happens to the audio
+afterwards. A pull request that reorders any of it shows up here.
+"""
+
+import contextlib
+import io
+import os
+import unittest
+from unittest import mock
+
+import api
+import assistant
+import config as cfg
+import paste
+import worker
+from tests.support import AppTest, make_wav, speech
+
+
+class Chain(AppTest):
+    def setUp(self):
+        super().setUp()
+        self.conf = self.config(cleanup_enabled=True,
+                                cleanup_provider="openrouter",
+                                openai_api_key="sk-test",
+                                openrouter_api_key="sk-or-test")
+        worker._paste_shutdown.clear()
+        self.wav = make_wav(self.path("clip.wav"), speech(2.0))
+        # The levels a real recording of that length would have handed over.
+        self.rms = [0.0005] * 40 + [0.2] * 20
+
+    def run_chain(self, ask=False, paste_override=None, duration=2.0,
+                  transcript="uh, book it for Thursday",
+                  cleaned="Book it for Thursday.",
+                  cleanup_error=None, answer=("Booked.", ""), rms=None,
+                  clipboard=b"what was there before", paste_error=None,
+                  restore_error=None):
+        pipeline = worker.Pipeline(self.conf)
+        done, failures, stages, cancels = [], [], [], []
+        pipeline.finished.connect(lambda *args: done.append(args))
+        pipeline.failed.connect(failures.append)
+        pipeline.stage.connect(stages.append)
+        pipeline.cancelled.connect(lambda: cancels.append(True))
+
+        cleanup = (mock.Mock(side_effect=cleanup_error) if cleanup_error
+                   else mock.Mock(return_value=cleaned))
+        calls = {}
+        # The chain reports its own failures on stderr, which a test run has no
+        # use for.
+        with contextlib.redirect_stderr(io.StringIO()), \
+                mock.patch.object(api, "transcribe", return_value=transcript) as tr, \
+                mock.patch.object(api, "cleanup", cleanup), \
+                mock.patch.object(assistant, "ask", return_value=answer) as ask_call, \
+                mock.patch.object(paste, "copy") as copy, \
+                mock.patch.object(paste, "copy_bytes") as copy_bytes, \
+                mock.patch.object(paste, "press") as press, \
+                mock.patch.object(paste, "read_clipboard",
+                                  return_value=clipboard) as read_clipboard, \
+                mock.patch.object(worker.time, "sleep", lambda seconds: None):
+            press.side_effect = paste_error
+            copy_bytes.side_effect = restore_error
+            calls = {"transcribe": tr, "cleanup": cleanup, "ask": ask_call,
+                     "copy": copy, "copy_bytes": copy_bytes, "press": press,
+                     "read_clipboard": read_clipboard}
+            pipeline._work(self.wav, duration,
+                           self.rms if rms is None else rms, ask, paste_override)
+        return {"done": done, "failures": failures, "stages": stages,
+                "cancelled": cancels, **calls}
+
+    # ---- the ordinary run -------------------------------------------------
+
+    def test_a_dictation_is_transcribed_cleaned_copied_and_pasted(self):
+        run = self.run_chain()
+        self.assertEqual(run["failures"], [])
+        self.assertEqual(
+            run["done"][0],
+            ("uh, book it for Thursday", "Book it for Thursday.", "", ""),
+        )
+        run["copy"].assert_called_once_with("Book it for Thursday.")
+        run["press"].assert_called_once_with(self.conf["paste_shortcut"])
+
+    def test_the_stages_are_named_as_they_happen(self):
+        run = self.run_chain()
+        self.assertEqual(run["stages"][:2], ["Transcribing…", "Cleaning up…"])
+
+    def test_cleanup_switched_off_pastes_what_was_heard(self):
+        self.conf["cleanup_enabled"] = False
+        run = self.run_chain()
+        run["cleanup"].assert_not_called()
+        run["copy"].assert_called_once_with("uh, book it for Thursday")
+
+    def test_auto_paste_switched_off_only_copies(self):
+        self.conf["auto_paste"] = False
+        self.conf["restore_clipboard"] = True
+        run = self.run_chain()
+        run["copy"].assert_called_once()
+        run["press"].assert_not_called()
+        run["read_clipboard"].assert_not_called()
+
+    def test_a_run_asked_for_from_a_terminal_pastes_nowhere(self):
+        """The text comes back down the socket; the focused window is nobody's."""
+        run = self.run_chain(paste_override=False)
+        run["press"].assert_not_called()
+        run["copy"].assert_called_once()
+
+    def test_the_clipboard_is_put_back_afterwards(self):
+        self.conf["restore_clipboard"] = True
+        run = self.run_chain()
+        run["copy_bytes"].assert_called_once_with(
+            b"what was there before", mock.ANY)
+
+    def test_nothing_is_put_back_when_the_setting_is_off(self):
+        self.conf["restore_clipboard"] = False
+        run = self.run_chain()
+        run["copy_bytes"].assert_not_called()
+
+    def test_the_clipboard_is_put_back_when_the_keypress_fails(self):
+        self.conf["restore_clipboard"] = True
+        run = self.run_chain(paste_error=paste.PasteError("not trusted"))
+        self.assertIn("not trusted", run["failures"][0])
+        run["copy_bytes"].assert_called_once_with(
+            b"what was there before", mock.ANY)
+
+    def test_paste_and_restore_failures_are_both_reported(self):
+        self.conf["restore_clipboard"] = True
+        run = self.run_chain(
+            paste_error=paste.PasteError("could not press paste"),
+            restore_error=paste.PasteError("could not restore clipboard"),
+        )
+        self.assertIn("could not press paste", run["failures"][0])
+        self.assertIn("could not restore clipboard", run["failures"][0])
+
+
+    def test_the_transcription_is_told_the_language_and_the_glossary(self):
+        self.conf["language"] = "tr"
+        self.conf["transcribe_prompt"] = "Paraşüt"
+        run = self.run_chain()
+        self.assertEqual(run["transcribe"].call_args.kwargs["language"], "tr")
+        self.assertEqual(run["transcribe"].call_args.kwargs["prompt"], "Paraşüt")
+
+    # ---- silence and stock phrases ----------------------------------------
+
+    def test_room_tone_costs_no_api_call(self):
+        run = self.run_chain(rms=[0.00001] * 60)
+        run["transcribe"].assert_not_called()
+        self.assertIn("No speech", run["failures"][0])
+
+    def test_the_silence_check_can_be_switched_off(self):
+        self.conf["skip_silent"] = False
+        run = self.run_chain(rms=[0.00001] * 60)
+        run["transcribe"].assert_called_once()
+
+    def test_a_stock_phrase_from_a_short_clip_is_thrown_away(self):
+        run = self.run_chain(duration=2.0, transcript="Altyazı M.K.")
+        self.assertIn("stock phrase", run["failures"][0])
+        run["copy"].assert_not_called()
+
+    def test_the_hallucination_filter_can_be_switched_off(self):
+        self.conf["filter_hallucinations"] = False
+        run = self.run_chain(duration=2.0, transcript="Altyazı M.K.")
+        run["copy"].assert_called_once()
+
+    # ---- when something goes wrong ----------------------------------------
+
+    def test_a_failed_cleanup_still_pastes_the_transcript(self):
+        run = self.run_chain(cleanup_error=api.ApiError("rate limited"))
+        _raw, text, cleanup_warning, paste_warning = run["done"][0]
+        self.assertEqual(text, "uh, book it for Thursday")
+        self.assertIn("rate limited", cleanup_warning)
+        self.assertEqual(paste_warning, "")
+        run["copy"].assert_called_once_with("uh, book it for Thursday")
+
+    def test_a_failed_cleanup_is_never_silent(self):
+        """A rejected key would otherwise look like dictation that works."""
+        run = self.run_chain(cleanup_error=api.ApiError("bad key"))
+        self.assertTrue(run["done"][0][2])
+        self.assertEqual(cfg.read_history()[0]["cleanup_error"], "bad key")
+
+    def test_a_failed_clipboard_restore_is_not_a_cleanup_failure(self):
+        run = self.run_chain(
+            restore_error=paste.PasteError("clipboard is busy"),
+        )
+        _raw, text, cleanup_warning, paste_warning = run["done"][0]
+        self.assertEqual(text, "Book it for Thursday.")
+        self.assertEqual(cleanup_warning, "")
+        self.assertIn("clipboard is busy", paste_warning)
+        history = cfg.read_history()[0]
+        self.assertEqual(history["cleanup_error"], "")
+        self.assertIn("clipboard is busy", history["paste_error"])
+
+    def test_a_failed_transcription_ends_the_run(self):
+        pipeline = worker.Pipeline(self.conf)
+        failures = []
+        pipeline.failed.connect(failures.append)
+        with mock.patch.object(api, "transcribe",
+                               side_effect=api.ApiError("no credit")), \
+                mock.patch.object(paste, "copy") as copy:
+            pipeline._work(self.wav, 2.0, self.rms, False, None)
+        self.assertIn("no credit", failures[0])
+        copy.assert_not_called()
+
+    def test_a_clipboard_that_will_not_take_it(self):
+        pipeline = worker.Pipeline(self.conf)
+        failures = []
+        pipeline.failed.connect(failures.append)
+        self.conf["restore_clipboard"] = False
+        with mock.patch.object(api, "transcribe", return_value="hello"), \
+                mock.patch.object(api, "cleanup", return_value="Hello."), \
+                mock.patch.object(paste, "copy",
+                                  side_effect=paste.PasteError("no wl-copy")):
+            pipeline._work(self.wav, 2.0, self.rms, False, None)
+        self.assertIn("wl-copy", failures[0])
+
+    def test_an_unexpected_error_is_reported_rather_than_swallowed(self):
+        pipeline = worker.Pipeline(self.conf)
+        failures = []
+        pipeline.failed.connect(failures.append)
+        with mock.patch.object(api, "transcribe", side_effect=ValueError("oh dear")), \
+                mock.patch("traceback.print_exc"):
+            pipeline._work(self.wav, 2.0, self.rms, False, None)
+        self.assertIn("oh dear", failures[0])
+
+    # ---- handing it to an agent -------------------------------------------
+
+    def test_a_command_goes_to_the_agent_and_the_answer_comes_back(self):
+        run = self.run_chain(ask=True)
+        run["ask"].assert_called_once()
+        self.assertEqual(run["ask"].call_args.args[0], "uh, book it for Thursday")
+        run["copy"].assert_called_once_with("Booked.")
+
+    def test_a_command_is_not_cleaned_up_first_by_default(self):
+        """The agent reads through the filler words without help."""
+        run = self.run_chain(ask=True)
+        run["cleanup"].assert_not_called()
+
+    def test_a_command_can_be_cleaned_up_if_you_want(self):
+        self.conf["assistant_cleanup"] = True
+        run = self.run_chain(ask=True)
+        run["cleanup"].assert_called_once()
+        self.assertEqual(run["ask"].call_args.args[0], "Book it for Thursday.")
+
+    def test_a_denied_tool_arrives_beside_the_answer(self):
+        run = self.run_chain(ask=True, answer=("Booked.", "It could not use: Bash"))
+        self.assertIn("Bash", run["done"][0][2])
+
+    def test_the_agent_has_its_own_paste_setting(self):
+        self.conf["assistant_paste"] = False
+        run = self.run_chain(ask=True)
+        run["press"].assert_not_called()
+
+    def test_a_command_that_was_cancelled(self):
+        pipeline = worker.Pipeline(self.conf)
+        cancels = []
+        pipeline.cancelled.connect(lambda: cancels.append(True))
+        with mock.patch.object(api, "transcribe", return_value="hello"), \
+                mock.patch.object(assistant, "ask", side_effect=assistant.Cancelled):
+            pipeline._work(self.wav, 2.0, self.rms, True, None)
+        self.assertEqual(cancels, [True])
+
+    def test_an_agent_that_is_not_installed(self):
+        pipeline = worker.Pipeline(self.conf)
+        failures = []
+        pipeline.failed.connect(failures.append)
+        with mock.patch.object(api, "transcribe", return_value="hello"), \
+                mock.patch.object(assistant, "ask",
+                                  side_effect=assistant.AssistantError("no claude")):
+            pipeline._work(self.wav, 2.0, self.rms, True, None)
+        self.assertIn("no claude", failures[0])
+
+    # ---- what is left behind ----------------------------------------------
+
+    def test_the_run_is_written_to_the_history(self):
+        self.run_chain()
+        row = cfg.read_history()[0]
+        self.assertEqual(row["raw"], "uh, book it for Thursday")
+        self.assertEqual(row["text"], "Book it for Thursday.")
+        self.assertEqual(row["duration"], 2.0)
+        self.assertEqual(row["model"], self.conf.transcribe_target().model)
+        self.assertEqual(row["mode"], "")
+
+    def test_a_command_is_recorded_as_one(self):
+        self.run_chain(ask=True)
+        row = cfg.read_history()[0]
+        self.assertEqual(row["mode"], "ask")
+        self.assertEqual(row["question"], "uh, book it for Thursday")
+        self.assertEqual(row["text"], "Booked.")
+
+    def test_the_history_is_kept_to_its_limit(self):
+        self.conf["history_limit"] = 2
+        for _ in range(4):
+            self.wav = make_wav(self.path("clip.wav"), speech(2.0))
+            self.run_chain()
+        self.assertEqual(len(cfg.read_history()), 2)
+
+    def test_the_recording_is_deleted_when_it_is_done_with(self):
+        self.run_chain()
+        self.assertFalse(os.path.exists(self.wav))
+
+    def test_the_recording_is_kept_when_the_setting_says_so(self):
+        self.conf["keep_audio"] = True
+        self.run_chain()
+        self.assertFalse(os.path.exists(self.wav))
+        self.assertEqual(len(list(cfg.RECORDINGS_DIR.iterdir())), 1)
+
+    def test_the_recording_goes_even_when_the_run_failed(self):
+        self.run_chain(rms=[0.00001] * 60)
+        self.assertFalse(os.path.exists(self.wav))
+
+
+class Busy(AppTest):
+    def test_a_second_run_while_one_is_going_is_ignored(self):
+        pipeline = worker.Pipeline(self.config())
+        pipeline._thread = mock.Mock(is_alive=lambda: True)
+        self.assertTrue(pipeline.busy)
+        with mock.patch.object(worker.threading, "Thread") as thread:
+            pipeline.run("/tmp/nope.wav", 1.0)
+        thread.assert_not_called()
+
+    def test_the_chunk_length_matches_the_level_meter(self):
+        """The silence thresholds are read in seconds, so the two must agree."""
+        self.assertAlmostEqual(worker.CHUNK_SECONDS, 1024 / 16000)
+
+
+if __name__ == "__main__":
+    unittest.main()

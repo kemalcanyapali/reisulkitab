@@ -1,0 +1,40 @@
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # PyQt6 ships Qt itself, but Qt still loads these from the system, even
+      # for the offscreen platform the tests run on. QtNetwork wants the Kerberos
+      # library, and the widgets want fontconfig, whether or not anything is
+      # ever drawn.
+      - name: Install the Qt runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libegl1 libgl1 libxkbcommon0 libdbus-1-3 libglib2.0-0 \
+            libfontconfig1 libfreetype6 libgssapi-krb5-2
+
+      - name: Install PyQt6
+        run: python -m pip install --quiet PyQt6
+
+      # Nothing else is needed: the code is standard library and PyQt6, and the
+      # tests reach neither the network nor a sound device.
+      - name: Run the tests
+        run: python -m unittest discover --verbose

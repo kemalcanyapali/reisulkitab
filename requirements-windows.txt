@@ -1,0 +1,4 @@
+PyQt6>=6.7,<7
+numpy>=2.0,<3
+SoundCard>=0.4.3,<0.5
+PyInstaller>=6.10,<7
