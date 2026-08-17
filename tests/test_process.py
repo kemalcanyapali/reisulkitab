@@ -13,6 +13,18 @@ class WindowlessSubprocesses(unittest.TestCase):
                                   create=True):
             self.assertEqual(process.windowless_options(), {"creationflags": 8})
 
+    def test_simulated_windows_without_the_flag_uses_zero(self):
+        missing = object()
+        flag = getattr(process.subprocess, "CREATE_NO_WINDOW", missing)
+        try:
+            if flag is not missing:
+                delattr(process.subprocess, "CREATE_NO_WINDOW")
+            with mock.patch.object(process.os, "name", "nt"):
+                self.assertEqual(process.windowless_options(), {"creationflags": 0})
+        finally:
+            if flag is not missing:
+                setattr(process.subprocess, "CREATE_NO_WINDOW", flag)
+
     def test_other_platforms_leave_subprocess_creation_unchanged(self):
         with mock.patch.object(process.os, "name", "posix"):
             self.assertEqual(process.windowless_options(), {})
