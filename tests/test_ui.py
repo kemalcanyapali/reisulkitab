@@ -546,6 +546,11 @@ class GuiConsole(unittest.TestCase):
             reisulkuttab._detach_gui_console()
             self.assertIs(reisulkuttab.sys.stdout, output)
             self.assertIs(reisulkuttab.sys.stderr, output)
+            print("background warning", file=reisulkuttab.sys.stderr)
+            output.write.assert_has_calls([
+                mock.call("background warning"),
+                mock.call("\n"),
+            ])
         self.assertEqual(
             open_file.call_args_list,
             [mock.call(os.devnull, "w", encoding="utf-8")] * 2,
