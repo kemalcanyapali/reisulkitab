@@ -6,6 +6,7 @@ save, so a setting added to one half and not the other is silently reset the
 next time anybody presses Save. That is the failure this catches.
 """
 
+import os
 import sys
 import unittest
 import types
@@ -531,6 +532,24 @@ class GuiConsole(unittest.TestCase):
                 mock.patch.dict(sys.modules, {"ctypes": ctypes}):
             reisulkuttab._detach_gui_console()
         free_console.assert_called_once_with()
+
+    def test_windows_gui_discards_output_after_console_detaches(self):
+        free_console = mock.Mock()
+        output = mock.Mock()
+        kernel32 = types.SimpleNamespace(FreeConsole=free_console)
+        ctypes = types.SimpleNamespace(windll=types.SimpleNamespace(kernel32=kernel32))
+        with mock.patch.object(reisulkuttab.sys, "platform", "win32"), \
+                mock.patch.dict(sys.modules, {"ctypes": ctypes}), \
+                mock.patch("builtins.open", return_value=output) as open_file, \
+                mock.patch.object(reisulkuttab.sys, "stdout", None), \
+                mock.patch.object(reisulkuttab.sys, "stderr", None):
+            reisulkuttab._detach_gui_console()
+            self.assertIs(reisulkuttab.sys.stdout, output)
+            self.assertIs(reisulkuttab.sys.stderr, output)
+        self.assertEqual(
+            open_file.call_args_list,
+            [mock.call(os.devnull, "w", encoding="utf-8")] * 2,
+        )
 
     def test_gui_mode_detaches_but_cli_mode_keeps_its_console(self):
         with mock.patch.object(reisulkuttab.sys, "argv", ["reisulkuttab", "--gui"]), \
