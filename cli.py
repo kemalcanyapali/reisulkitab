@@ -35,6 +35,7 @@ import hotkey
 import ipc
 import meeting
 import paste
+import process
 
 NOT_RUNNING = 3
 
@@ -153,7 +154,7 @@ def launch_gui(verb=""):
         args.append(verb)
     args.append("--gui")
     if frozen and os.name == "nt":
-        subprocess.Popen(args, close_fds=True)
+        subprocess.Popen(args, close_fds=True, **process.windowless_options())
         raise SystemExit(0)
     os.execv(sys.executable, args)
 

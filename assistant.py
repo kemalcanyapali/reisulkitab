@@ -34,6 +34,7 @@ import time
 import api
 import config as cfg
 import ggml
+import process
 from i18n import t
 
 SESSION_FILE = cfg.DATA_DIR / "assistant.json"
@@ -403,6 +404,7 @@ def _stream(cmd, conf, on_event, should_stop):
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
             env=cli_environment(), start_new_session=os.name != "nt",
+            **process.windowless_options(),
         )
         if os.name != "nt" or hasattr(proc, "_handle"):
             ggml._assign_kill_job(proc)

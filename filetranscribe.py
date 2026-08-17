@@ -26,6 +26,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 import api
 import cleanup
 import ggml
+import process
 from i18n import t
 
 UPLOAD_LIMIT = 24 * 1024 * 1024  # the APIs take 25 MB; leave the form its room
@@ -282,7 +283,7 @@ def _ffmpeg(args, out, aborter=None):
     proc = subprocess.Popen(
         ["ffmpeg", "-nostdin", "-y", *args],
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True,
+        text=True, **process.windowless_options(),
     )
     # A two hour film is a minute of ffmpeg, which is a minute of a Stop button
     # doing nothing unless the abort reaches the process itself.

@@ -20,6 +20,7 @@ import threading
 import api
 import assistant
 import ggml
+import process
 from i18n import t
 
 PROVIDERS = ("local", "agy", "openrouter", "claude")
@@ -199,6 +200,7 @@ def _redirected_output(cmd, timeout, service, cwd):
                 cmd, cwd=cwd or os.path.expanduser("~"), stdin=subprocess.DEVNULL,
                 stdout=stdout, stderr=stderr,
                 env=assistant.cli_environment(),
+                **process.windowless_options(),
             )
             try:
                 try:

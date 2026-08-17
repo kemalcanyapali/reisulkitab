@@ -48,6 +48,7 @@ import zipfile
 
 import brand
 import hub
+import process
 from i18n import t
 
 HOST = "127.0.0.1"
@@ -771,7 +772,7 @@ class Server:
                     proc = subprocess.Popen(
                         args + ["--host", HOST, "--port", str(port)],
                         stdout=sink, stderr=subprocess.STDOUT,
-                        stdin=subprocess.DEVNULL,
+                        stdin=subprocess.DEVNULL, **process.windowless_options(),
                     )
             except OSError as exc:
                 raise LocalError(t("Could not start {name}: {error}",

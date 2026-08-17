@@ -30,6 +30,7 @@ import wave
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from i18n import t
+import process
 
 RATE = 16000
 CHANNELS = 1
@@ -103,7 +104,8 @@ class Recorder(QObject):
 
         try:
             self._proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
+                **process.windowless_options(),
             )
         except OSError as exc:
             self.failed.emit(t("Could not start recording: {error}", error=exc))
@@ -396,7 +398,8 @@ class MeetingRecorder(QObject):
             # nobody drains would eventually block it, so it writes to a file.
             self._log = tempfile.TemporaryFile()
             self._proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=self._log, bufsize=0
+                cmd, stdout=subprocess.PIPE, stderr=self._log, bufsize=0,
+                **process.windowless_options(),
             )
         except (OSError, wave.Error) as exc:
             self._close_file()
