@@ -532,6 +532,21 @@ class GuiConsole(unittest.TestCase):
             reisulkuttab._detach_gui_console()
         free_console.assert_called_once_with()
 
+    def test_gui_mode_detaches_but_cli_mode_keeps_its_console(self):
+        with mock.patch.object(reisulkuttab.sys, "argv", ["reisulkuttab", "--gui"]), \
+                mock.patch.object(reisulkuttab, "_detach_gui_console") as detach, \
+                mock.patch.object(reisulkuttab, "run_app", return_value=0) as run:
+            self.assertEqual(reisulkuttab.main(), 0)
+        detach.assert_called_once_with()
+        run.assert_called_once_with([])
+
+        with mock.patch.object(reisulkuttab.sys, "argv", ["reisulkuttab", "status"]), \
+                mock.patch.object(reisulkuttab, "_detach_gui_console") as detach, \
+                mock.patch.object(reisulkuttab.cli, "run", return_value=0) as run:
+            self.assertEqual(reisulkuttab.main(), 0)
+        detach.assert_not_called()
+        run.assert_called_once_with(["status"])
+
 
 class LaunchAtLoginMigration(unittest.TestCase):
     class Key(dict):
