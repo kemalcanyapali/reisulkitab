@@ -78,6 +78,11 @@ class Loading(AppTest):
         self.assertIsNone(cfg.Config()["no_such_setting"])
         self.assertEqual(cfg.Config().get("no_such_setting", "fallback"), "fallback")
 
+    def test_windows_migrates_hold_dictation_to_toggle(self):
+        self.write_config({"hotkey_mode": "hold"})
+        with mock.patch.object(cfg.sys, "platform", "win32"):
+            self.assertEqual(cfg.Config()["hotkey_mode"], "toggle")
+
 
 class Saving(AppTest):
     def test_a_saved_setting_comes_back(self):

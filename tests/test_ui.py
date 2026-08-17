@@ -521,6 +521,18 @@ class DictationWarnings(AppTest):
         )
 
 
+
+class GuiConsole(unittest.TestCase):
+    def test_windows_gui_detaches_from_the_console(self):
+        free_console = mock.Mock()
+        kernel32 = types.SimpleNamespace(FreeConsole=free_console)
+        ctypes = types.SimpleNamespace(windll=types.SimpleNamespace(kernel32=kernel32))
+        with mock.patch.object(reisulkuttab.sys, "platform", "win32"), \
+                mock.patch.dict(sys.modules, {"ctypes": ctypes}):
+            reisulkuttab._detach_gui_console()
+        free_console.assert_called_once_with()
+
+
 class LaunchAtLoginMigration(unittest.TestCase):
     class Key(dict):
         def __enter__(self):
