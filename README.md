@@ -1,6 +1,6 @@
 # Reisülküttab for Windows
 
-Reisülküttab is a private Windows system-tray application for push-to-talk dictation, meeting capture, and optional transcript cleanup with local or hosted AI providers.
+Reisülküttab is a local-first Windows system-tray application for push-to-talk dictation, meeting capture, and optional transcript cleanup with local or hosted AI providers.
 
 - Hold the configured dictation shortcut, speak, and release. Reisülküttab transcribes, optionally cleans the text, and pastes it at the cursor.
 - Start and stop a meeting from the tray. Reisülküttab records the microphone and system output, then saves a Markdown note with the summary, decisions, action items, transcript, and adjacent WAV file.
