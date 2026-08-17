@@ -137,8 +137,8 @@ Commands that use the microphone communicate with the running tray instance. Fil
 3. Delete `%LOCALAPPDATA%\Programs\reisulkuttab`.
 4. To remove personal data as well, delete `%APPDATA%\reisulkuttab` and `%LOCALAPPDATA%\reisulkuttab`.
 
-## License and attribution
+## License
 
 Reisülküttab is distributed under the GNU General Public License v3.0. The full, unmodified license is in [`LICENSE`](LICENSE).
 
-This project is derived from [Dikte by Yusuf İpek](https://github.com/yusufipk/dikte). Copyright and contributor attribution from the upstream project are retained. Reisülküttab modifications remain licensed under GPL-3.0; redistributions must preserve the license, source-availability obligations, and attribution notices.
+This is a modified version of Dikte; the modifications are dated 2026. Source distributions remain licensed under GPL-3.0.
