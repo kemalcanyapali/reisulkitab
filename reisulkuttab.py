@@ -1130,6 +1130,8 @@ def _detach_gui_console():
     if sys.platform == "win32":
         import ctypes
         ctypes.windll.kernel32.FreeConsole()
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
 
 def main():
