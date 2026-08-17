@@ -563,7 +563,7 @@ DEFAULTS = {
     "min_voiced_seconds": 0.3,
     "filter_hallucinations": True,
     "shortcut": "Ctrl+Alt+D" if sys.platform == "win32" else "Ctrl+Space",
-    "hotkey_mode": "hold" if sys.platform == "win32" else "toggle",
+    "hotkey_mode": "toggle",
     "cancel_shortcut": "Ctrl+Alt+Space",
     "evdev_hotkey": False,
     "dictation_enabled": True,
@@ -785,6 +785,8 @@ class Config:
         except (json.JSONDecodeError, OSError) as exc:
             print(f"{brand.SLUG}: could not read settings ({exc}), using defaults",
                   file=sys.stderr)
+        if sys.platform == "win32" and self.data["hotkey_mode"] == "hold":
+            self.data["hotkey_mode"] = "toggle"
         self.data["overlay_corner"] = _CORNER_MIGRATION.get(
             self.data["overlay_corner"], self.data["overlay_corner"]
         )

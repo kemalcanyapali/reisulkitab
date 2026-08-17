@@ -1125,6 +1125,13 @@ def _take_request(buffer, final=False):
 
 
 
+def _detach_gui_console():
+    """Keep the tray application out of the user's taskbar."""
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.kernel32.FreeConsole()
+
+
 def main():
     argv = sys.argv[1:]
     # Anything typed at a terminal is the command line's business, including
@@ -1132,6 +1139,7 @@ def main():
     # with --gui when it turns out there is no instance to send one to.
     if "--gui" not in argv:
         return cli.run(argv)
+    _detach_gui_console()
     return run_app([arg for arg in argv if arg != "--gui"])
 
 
