@@ -507,7 +507,9 @@ class Launching(unittest.TestCase):
             cli.launch_gui("meeting")
         self.assertEqual(stopped.exception.code, 0)
         popen.assert_called_once_with(
-            [cli.sys.executable, "meeting", "--gui"], close_fds=True)
+            [cli.sys.executable, "meeting", "--gui"], close_fds=True,
+            creationflags=getattr(cli.subprocess, "CREATE_NO_WINDOW", 0),
+        )
 
 
 class WithoutAnInstance(AppTest):
