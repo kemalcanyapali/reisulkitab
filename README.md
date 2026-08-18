@@ -28,6 +28,23 @@ Reisülküttab is a local-first Windows system-tray application for push-to-talk
 
 The installer copies the complete onedir package to `%LOCALAPPDATA%\Programs\reisulkuttab`, creates the Start menu shortcut with the branded icon, removes predecessor and transitional installs, and preserves the existing user profile. Do not copy only the EXE: the adjacent `_internal` directory is required.
 
+### Update
+
+Give your coding agent this request:
+
+> Update my Reisülküttab installation from `https://github.com/kemalcanyapali/reisulkitab`. Use the existing clone if present; otherwise clone the repository. Pull `main` with `git pull --ff-only`, run `build-windows.ps1`, then run `install-windows.ps1`. Preserve my settings and user data under `%APPDATA%\reisulkuttab` and `%LOCALAPPDATA%\reisulkuttab`.
+
+The equivalent manual commands, run inside the repository, are:
+
+```powershell
+git pull --ff-only
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build-windows.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install-windows.ps1
+```
+
+The install script replaces only the application under `%LOCALAPPDATA%\Programs\reisulkuttab`; settings, history, models, and recordings are retained.
+
+
 ### Run from source
 
 Requirements: Windows 10/11, Python 3.11 or 3.12, and PowerShell.

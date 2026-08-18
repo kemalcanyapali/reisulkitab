@@ -25,6 +25,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\install-windows.ps1
 
 Kurulum uygulamayı başlatır. Daha sonra Başlat menüsünden **Reisülküttab**'ı açın, **Ayarlar**'dan transkripsiyon sağlayıcısını ve kısayolları seçin. Paketlenmiş uygulamayı yalnızca EXE dosyasını kopyalayarak taşımayın; yanındaki `_internal` klasörü gereklidir.
 
+## Güncelleme
+
+Kodlama agentınıza şu isteği verin:
+
+> Reisülküttab kurulumumu `https://github.com/kemalcanyapali/reisulkitab` adresinden güncelle. Mevcut klonu varsa kullan, yoksa depoyu klonla. `main` dalını `git pull --ff-only` ile çek; ardından `build-windows.ps1` ve `install-windows.ps1` dosyalarını çalıştır. `%APPDATA%\reisulkuttab` ve `%LOCALAPPDATA%\reisulkuttab` altındaki ayarlarımı ve kullanıcı verilerimi koru.
+
+Aynı işlemin depo klasöründe çalıştırılacak manuel komutları:
+
+```powershell
+git pull --ff-only
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build-windows.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install-windows.ps1
+```
+
+Kurulum betiği yalnızca `%LOCALAPPDATA%\Programs\reisulkuttab` altındaki uygulamayı değiştirir; ayarlar, geçmiş, modeller ve kayıtlar korunur.
+
+
 ## Mikrofon gizliliği
 
 **Ayarlar → Gizlilik ve güvenlik → Mikrofon** altında şu iki denetimi etkinleştirin:
