@@ -171,6 +171,14 @@ class Chain(AppTest):
         self.assertIn("rate limited", cleanup_warning)
         self.assertEqual(paste_warning, "")
         run["copy"].assert_called_once_with("uh, book it for Thursday")
+    def test_an_unexpected_cleanup_error_still_pastes_the_transcript(self):
+        run = self.run_chain(cleanup_error=ValueError("malformed response"))
+        _raw, text, cleanup_warning, paste_warning = run["done"][0]
+        self.assertEqual(text, "uh, book it for Thursday")
+        self.assertIn("malformed response", cleanup_warning)
+        self.assertEqual(paste_warning, "")
+        run["copy"].assert_called_once_with("uh, book it for Thursday")
+
 
     def test_a_failed_cleanup_is_never_silent(self):
         """A rejected key would otherwise look like dictation that works."""

@@ -523,37 +523,46 @@ class DictationWarnings(AppTest):
 
 
 
-class GuiConsole(unittest.TestCase):
+    def test_red_error_is_written_to_diagnostics(self):
+        controller = self.controller()
+        output = mock.Mock()
+        with mock.patch.object(reisulkuttab.sys, "stderr", output), \
+                mock.patch.object(reisulkuttab.time, "strftime",
+                                  return_value="2026-08-18 12:00:00"):
+            controller._report("cleanup exploded", controller.overlay)
+        written = "".join(call.args[0] for call in output.write.call_args_list)
+        self.assertIn("2026-08-18 12:00:00 error: cleanup exploded", written)
+
+
+class GuiConsole(AppTest):
     def test_windows_gui_detaches_from_the_console(self):
         free_console = mock.Mock()
         kernel32 = types.SimpleNamespace(FreeConsole=free_console)
         ctypes = types.SimpleNamespace(windll=types.SimpleNamespace(kernel32=kernel32))
         with mock.patch.object(reisulkuttab.sys, "platform", "win32"), \
-                mock.patch.dict(sys.modules, {"ctypes": ctypes}):
-            reisulkuttab._detach_gui_console()
-        free_console.assert_called_once_with()
-
-    def test_windows_gui_discards_output_after_console_detaches(self):
-        free_console = mock.Mock()
-        output = mock.Mock()
-        kernel32 = types.SimpleNamespace(FreeConsole=free_console)
-        ctypes = types.SimpleNamespace(windll=types.SimpleNamespace(kernel32=kernel32))
-        with mock.patch.object(reisulkuttab.sys, "platform", "win32"), \
                 mock.patch.dict(sys.modules, {"ctypes": ctypes}), \
-                mock.patch("builtins.open", return_value=output) as open_file, \
                 mock.patch.object(reisulkuttab.sys, "stdout", None), \
                 mock.patch.object(reisulkuttab.sys, "stderr", None):
             reisulkuttab._detach_gui_console()
-            self.assertIs(reisulkuttab.sys.stdout, output)
-            self.assertIs(reisulkuttab.sys.stderr, output)
+            reisulkuttab.sys.stderr.close()
+        free_console.assert_called_once_with()
+
+    def test_windows_gui_records_output_after_console_detaches(self):
+        free_console = mock.Mock()
+        kernel32 = types.SimpleNamespace(FreeConsole=free_console)
+        ctypes = types.SimpleNamespace(windll=types.SimpleNamespace(kernel32=kernel32))
+        log_file = cfg.DATA_DIR / "reisulkuttab.log"
+        with mock.patch.object(reisulkuttab.sys, "platform", "win32"), \
+                mock.patch.dict(sys.modules, {"ctypes": ctypes}), \
+                mock.patch.object(reisulkuttab.sys, "stdout", None), \
+                mock.patch.object(reisulkuttab.sys, "stderr", None):
+            reisulkuttab._detach_gui_console()
+            self.assertIs(reisulkuttab.sys.stdout, reisulkuttab.sys.stderr)
             print("background warning", file=reisulkuttab.sys.stderr)
-            output.write.assert_has_calls([
-                mock.call("background warning"),
-                mock.call("\n"),
-            ])
-        self.assertEqual(
-            open_file.call_args_list,
-            [mock.call(os.devnull, "w", encoding="utf-8")] * 2,
+            reisulkuttab.sys.stderr.close()
+
+        self.assertIn(
+            "background warning", log_file.read_text(encoding="utf-8"),
         )
 
     def test_gui_mode_detaches_but_cli_mode_keeps_its_console(self):

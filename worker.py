@@ -125,12 +125,15 @@ class Pipeline(QObject):
                 self.stage.emit(t("Cleaning up…"))
                 try:
                     text = cleanup.run(raw, conf, conf.cleanup_prompt())
-                except api.ApiError as exc:
-                    # Keep the transcript, but never let the failure pass unseen:
-                    # a rejected key would otherwise look like working dictation.
+                except Exception as exc:
+                    # Cleanup is optional. Even a provider bug must not throw
+                    # away a valid transcript; keep the traceback for diagnosis.
                     text = raw
-                    warning = str(exc)
-                    print(f"reisulkuttab: cleanup failed: {exc}", file=sys.stderr)
+                    warning = str(exc) or type(exc).__name__
+                    print(f"reisulkuttab: cleanup failed: {warning}",
+                          file=sys.stderr)
+                    if not isinstance(exc, api.ApiError):
+                        traceback.print_exc()
 
             question = ""
             if ask:

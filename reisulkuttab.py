@@ -16,6 +16,7 @@ import pathlib
 import subprocess
 import sys
 import threading
+import time
 
 # A Wayland client cannot place a window in a screen corner, so the indicator
 # is drawn through XWayland.
@@ -873,6 +874,8 @@ class Reisulkuttab:
 
     def _report(self, message, overlay):
         first_line = message.strip().splitlines()[0]
+        print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} error: {message}",
+              file=sys.stderr, flush=True)
         overlay.show_error(first_line)
         if len(message) > len(first_line):
             self.tray.showMessage("Reisülküttab", message, QSystemTrayIcon.MessageIcon.Warning, 8000)
@@ -1126,12 +1129,21 @@ def _take_request(buffer, final=False):
 
 
 def _detach_gui_console():
-    """Keep the tray application out of the user's taskbar."""
+    """Keep the tray application out of the taskbar and retain diagnostics."""
     if sys.platform == "win32":
         import ctypes
         ctypes.windll.kernel32.FreeConsole()
-        sys.stdout = open(os.devnull, "w", encoding="utf-8")
-        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+        log_file = cfg.DATA_DIR / "reisulkuttab.log"
+        try:
+            cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            if log_file.exists() and log_file.stat().st_size >= 1_000_000:
+                log_file.replace(log_file.with_name(log_file.name + ".1"))
+            output = open(log_file, "a", encoding="utf-8", buffering=1)
+        except OSError:
+            output = open(os.devnull, "w", encoding="utf-8")
+        sys.stdout = output
+        sys.stderr = output
+        print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} started", flush=True)
 
 
 def main():
