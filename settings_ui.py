@@ -5,7 +5,9 @@ import shutil
 import threading
 
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut
+from PyQt6.QtGui import (
+    QCursor, QDesktopServices, QGuiApplication, QKeySequence, QShortcut,
+)
 from PyQt6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
@@ -484,18 +486,29 @@ class SettingsWindow(QDialog):
         self._shown_provider = ""
         self.transcriber = FileTranscriber(conf, self)
         self.setWindowTitle(t("Reisülküttab Settings"))
-        self.resize(680, 640)
+        self._tracked_window = None
+        self._tracked_screen = None
+        screen = self._screen_for_open()
+        if screen is None:
+            self.resize(680, 640)
+        else:
+            available = screen.availableGeometry()
+            self.resize(
+                max(1, min(680, available.width() - 40)),
+                max(1, min(640, available.height() - 80)),
+            )
 
         tabs = self.tabs = QTabWidget(self)
-        tabs.addTab(self._general_tab(), t("General"))
-        self.api_tab_index = tabs.addTab(self._api_tab(), t("API and models"))
-        tabs.addTab(self._prompt_tab(), t("Cleanup rules"))
-        tabs.addTab(self._assistant_tab(), t("Agent"))
-        tabs.addTab(self._meeting_tab(), t("Meeting"))
-        tabs.addTab(self._minutes_tab(), t("Minutes"))
-        tabs.addTab(self._file_tab(), t("Audio file"))
-        tabs.addTab(self._shortcut_tab(), t("Shortcuts"))
-        tabs.addTab(self._history_tab(), t("History"))
+        tabs.addTab(self._scrollable(self._general_tab()), t("General"))
+        self.api_tab_index = tabs.addTab(
+            self._scrollable(self._api_tab()), t("API and models"))
+        tabs.addTab(self._scrollable(self._prompt_tab()), t("Cleanup rules"))
+        tabs.addTab(self._scrollable(self._assistant_tab()), t("Agent"))
+        tabs.addTab(self._scrollable(self._meeting_tab()), t("Meeting"))
+        tabs.addTab(self._scrollable(self._minutes_tab()), t("Minutes"))
+        tabs.addTab(self._scrollable(self._file_tab()), t("Audio file"))
+        tabs.addTab(self._scrollable(self._shortcut_tab()), t("Shortcuts"))
+        tabs.addTab(self._scrollable(self._history_tab()), t("History"))
 
         # Save keeps the window open, so the window is closed with the titlebar
         # cross (or Escape) instead. A "Cancel" next to it would be a lie: the
@@ -528,7 +541,100 @@ class SettingsWindow(QDialog):
         if not conf.transcribe_ready():
             self.tabs.setCurrentIndex(self.api_tab_index)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._track_window()
+        screen = self._screen_for_open()
+        self._track_screen(screen)
+        self._fit_to_screen(screen, center=True)
+
+    def _screen_for_open(self):
+        parent = self.parentWidget()
+        if parent is not None:
+            return parent.screen()
+        return (
+            QGuiApplication.screenAt(QCursor.pos())
+            or QGuiApplication.primaryScreen()
+        )
+
+    def _track_window(self):
+        handle = self.windowHandle()
+        if handle is self._tracked_window:
+            return
+        if self._tracked_window is not None:
+            try:
+                self._tracked_window.screenChanged.disconnect(self._screen_changed)
+            except RuntimeError:
+                pass
+        self._tracked_window = handle
+        if handle is not None:
+            handle.screenChanged.connect(self._screen_changed)
+
+    def _track_screen(self, screen):
+        if screen is self._tracked_screen:
+            return
+        if self._tracked_screen is not None:
+            signal = getattr(
+                self._tracked_screen, "availableGeometryChanged", None)
+            if signal is not None:
+                try:
+                    signal.disconnect(self._screen_geometry_changed)
+                except RuntimeError:
+                    pass
+        self._tracked_screen = screen
+        if screen is not None:
+            signal = getattr(screen, "availableGeometryChanged", None)
+            if signal is not None:
+                signal.connect(self._screen_geometry_changed)
+
+    def _screen_changed(self, screen):
+        self._track_screen(screen)
+        self._fit_to_screen(screen)
+
+    def _screen_geometry_changed(self, _geometry):
+        self._fit_to_screen(self._tracked_screen)
+
+    def _fit_to_screen(self, screen, center=False):
+        if screen is None:
+            return
+        try:
+            available = screen.availableGeometry()
+        except RuntimeError:
+            return
+        frame = self.frameGeometry()
+        frame_width = max(0, frame.width() - self.width())
+        frame_height = max(0, frame.height() - self.height())
+        self.resize(
+            min(self.width(), max(1, available.width() - frame_width)),
+            min(self.height(), max(1, available.height() - frame_height)),
+        )
+        frame = self.frameGeometry()
+        if center:
+            frame.moveCenter(available.center())
+        else:
+            if frame.left() < available.left():
+                frame.moveLeft(available.left())
+            elif frame.right() > available.right():
+                frame.moveRight(available.right())
+            if frame.top() < available.top():
+                frame.moveTop(available.top())
+            elif frame.bottom() > available.bottom():
+                frame.moveBottom(available.bottom())
+        target = frame.topLeft()
+        self.move(target)
+        correction = target - self.frameGeometry().topLeft()
+        if not correction.isNull():
+            self.move(self.pos() + correction)
+
     # ---- tabs ----------------------------------------------------------
+
+    @staticmethod
+    def _scrollable(page):
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QScrollArea.Shape.NoFrame)
+        area.setWidget(page)
+        return area
 
     def _general_tab(self):
         page = QWidget()
@@ -962,11 +1068,7 @@ class SettingsWindow(QDialog):
         )
         layout.addWidget(reset_prompt, 0, Qt.AlignmentFlag.AlignRight)
 
-        area = QScrollArea()
-        area.setWidgetResizable(True)
-        area.setFrameShape(QScrollArea.Shape.NoFrame)
-        area.setWidget(page)
-        return area
+        return page
 
     def _meeting_tab(self):
         page = QWidget()
@@ -1098,13 +1200,7 @@ class SettingsWindow(QDialog):
         )
         layout.addWidget(reset, 0, Qt.AlignmentFlag.AlignRight)
 
-        # Everything above is more than one screenful; let it scroll rather than
-        # squeezing the prompt box down to nothing.
-        area = QScrollArea()
-        area.setWidgetResizable(True)
-        area.setFrameShape(QScrollArea.Shape.NoFrame)
-        area.setWidget(page)
-        return area
+        return page
 
     def _minutes_tab(self):
         page = QWidget()

@@ -13,6 +13,7 @@ import types
 from typing import ClassVar
 from unittest import mock
 
+from PyQt6.QtCore import QRect
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 import cleanup
@@ -134,8 +135,10 @@ class Settings(AppTest):
         tabs = window.findChildren(settings_ui.QTabWidget)[0]
         self.assertEqual(tabs.count(), 9)
         self.assertEqual(window.windowTitle(), "Reisülküttab Settings")
+
     def test_save_stays_on_screen_at_low_logical_height(self):
-        window = self.window(cfg.Config())
+        with mock.patch.object(cfg.Config, "transcribe_ready", return_value=True):
+            window = self.window(cfg.Config())
         window.show()
         window.resize(680, 400)
         _app.processEvents()
@@ -145,6 +148,122 @@ class Settings(AppTest):
         self.assertLessEqual(window.height(), 400)
         self.assertLess(save_bottom, window.height())
 
+    def test_every_tab_scrolls_while_save_stays_fixed(self):
+        with mock.patch.object(cfg.Config, "transcribe_ready", return_value=True):
+            window = self.window(cfg.Config())
+        for index in range(window.tabs.count()):
+            area = window.tabs.widget(index)
+            with self.subTest(tab=window.tabs.tabText(index)):
+                self.assertIsInstance(area, settings_ui.QScrollArea)
+                self.assertTrue(area.widgetResizable())
+        window.show()
+        window.resize(680, 300)
+        window.tabs.setCurrentIndex(3)
+        _app.processEvents()
+        area = window.tabs.currentWidget()
+        self.assertGreater(area.verticalScrollBar().maximum(), 0)
+        window.assistant_prompt.setFocus(settings_ui.Qt.FocusReason.TabFocusReason)
+        area.ensureWidgetVisible(window.assistant_prompt)
+        _app.processEvents()
+        self.assertTrue(window.assistant_prompt.hasFocus())
+        self.assertGreater(area.verticalScrollBar().value(), 0)
+
+    def test_initial_window_fits_the_screen_under_the_pointer(self):
+        geometry = QRect(40, 20, 800, 500)
+        screen = types.SimpleNamespace(availableGeometry=lambda: geometry)
+        primary_screen = mock.Mock()
+        gui = types.SimpleNamespace(
+            screenAt=lambda _position: screen,
+            primaryScreen=primary_screen,
+        )
+        with mock.patch.object(settings_ui, "QGuiApplication", gui), \
+                mock.patch.object(cfg.Config, "transcribe_ready", return_value=True):
+            window = self.window(cfg.Config())
+            window.resize(900, 700)
+            window.show()
+            _app.processEvents()
+            save = window.findChild(settings_ui.QDialogButtonBox).button(
+                settings_ui.QDialogButtonBox.StandardButton.Save)
+            save_rect = QRect(save.mapToGlobal(save.rect().topLeft()), save.size())
+            self.assertTrue(geometry.contains(window.frameGeometry()))
+            self.assertTrue(geometry.contains(save_rect))
+            primary_screen.assert_not_called()
+
+    def test_parent_screen_takes_precedence_over_pointer_screen(self):
+        geometry = QRect(0, 0, 640, 480)
+        parent_screen = types.SimpleNamespace(
+            availableGeometry=lambda: geometry)
+
+        class Parent(settings_ui.QWidget):
+            def screen(self):
+                return parent_screen
+
+        parent = Parent()
+        self.addCleanup(parent.deleteLater)
+        screen_at = mock.Mock()
+        gui = types.SimpleNamespace(
+            screenAt=screen_at,
+            primaryScreen=lambda: None,
+        )
+        with mock.patch.object(settings_ui, "QGuiApplication", gui):
+            window = settings_ui.SettingsWindow(cfg.Config(), parent=parent)
+        self.addCleanup(window.deleteLater)
+        self.addCleanup(window.close)
+        self.assertIs(window._screen_for_open(), parent_screen)
+        screen_at.assert_not_called()
+
+    def test_primary_screen_is_the_pointer_fallback(self):
+        geometry = QRect(0, 0, 640, 480)
+        primary_screen = types.SimpleNamespace(
+            availableGeometry=lambda: geometry)
+        gui = types.SimpleNamespace(
+            screenAt=lambda _position: None,
+            primaryScreen=lambda: primary_screen,
+        )
+        with mock.patch.object(settings_ui, "QGuiApplication", gui):
+            window = self.window(cfg.Config())
+            self.assertIs(window._screen_for_open(), primary_screen)
+
+    def test_screen_changes_clamp_without_recentering(self):
+        with mock.patch.object(cfg.Config, "transcribe_ready", return_value=True):
+            window = self.window(cfg.Config())
+        window.show()
+        window.resize(400, 300)
+        window.move(100, 120)
+        _app.processEvents()
+        geometry = [QRect(0, 0, 1200, 900)]
+        signal = mock.Mock()
+        screen = types.SimpleNamespace(
+            availableGeometry=lambda: geometry[0],
+            availableGeometryChanged=signal,
+        )
+        expected = window.frameGeometry().topLeft()
+        window._screen_changed(screen)
+        self.assertEqual(window.frameGeometry().topLeft(), expected)
+        signal.connect.assert_called_once_with(window._screen_geometry_changed)
+
+        geometry[0] = QRect(200, 200, 500, 400)
+        window.move(0, 0)
+        window._screen_geometry_changed(geometry[0])
+        self.assertTrue(geometry[0].contains(window.frameGeometry()))
+
+    def test_tiny_screen_bounds_are_never_overridden_by_a_minimum(self):
+        geometry = QRect(0, 0, 300, 200)
+        screen = types.SimpleNamespace(availableGeometry=lambda: geometry)
+        gui = types.SimpleNamespace(
+            screenAt=lambda _position: screen,
+            primaryScreen=lambda: None,
+        )
+        with mock.patch.object(settings_ui, "QGuiApplication", gui), \
+                mock.patch.object(cfg.Config, "transcribe_ready", return_value=True):
+            window = self.window(cfg.Config())
+            window.show()
+            _app.processEvents()
+            self.assertTrue(geometry.contains(window.frameGeometry()))
+            save = window.findChild(settings_ui.QDialogButtonBox).button(
+                settings_ui.QDialogButtonBox.StandardButton.Save)
+            save_rect = QRect(save.mapToGlobal(save.rect().topLeft()), save.size())
+            self.assertTrue(geometry.contains(save_rect))
 
     def test_saving_without_touching_anything_changes_nothing(self):
         """Every widget has to load what is stored, or Save writes its default
