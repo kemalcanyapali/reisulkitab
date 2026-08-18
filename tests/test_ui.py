@@ -134,6 +134,17 @@ class Settings(AppTest):
         tabs = window.findChildren(settings_ui.QTabWidget)[0]
         self.assertEqual(tabs.count(), 9)
         self.assertEqual(window.windowTitle(), "Reisülküttab Settings")
+    def test_save_stays_on_screen_at_low_logical_height(self):
+        window = self.window(cfg.Config())
+        window.show()
+        window.resize(680, 400)
+        _app.processEvents()
+        save = window.findChild(settings_ui.QDialogButtonBox).button(
+            settings_ui.QDialogButtonBox.StandardButton.Save)
+        save_bottom = save.mapTo(window, save.rect().bottomRight()).y()
+        self.assertLessEqual(window.height(), 400)
+        self.assertLess(save_bottom, window.height())
+
 
     def test_saving_without_touching_anything_changes_nothing(self):
         """Every widget has to load what is stored, or Save writes its default
