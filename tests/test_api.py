@@ -371,6 +371,13 @@ class Cleanup(AppTest):
             api.cleanup("hello", "k", "m", "p")
         self.assertIn("model is offline", str(caught.exception))
 
+    def test_a_list_shaped_error_keeps_the_provider_message(self):
+        body = json.dumps([{"error": {"message": "Please pass a valid API key"}}])
+        with fake_urlopen(http_error(400, body)), \
+                self.assertRaises(api.ApiError) as caught:
+            api.cleanup("hello", "bad-key", "m", "p")
+        self.assertIn("Please pass a valid API key", str(caught.exception))
+
     def test_an_empty_answer(self):
         with fake_urlopen(chat_reply("   ")), self.assertRaises(api.ApiError):
             api.cleanup("hello", "k", "m", "p")

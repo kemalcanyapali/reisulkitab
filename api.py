@@ -282,6 +282,10 @@ def _extract_error(body):
         payload = json.loads(body)
     except json.JSONDecodeError:
         return body[:300]
+    if isinstance(payload, list):
+        payload = payload[0] if payload else {}
+    if not isinstance(payload, dict):
+        return body[:300]
     err = payload.get("error")
     if isinstance(err, dict):
         return err.get("message") or json.dumps(err)[:300]
