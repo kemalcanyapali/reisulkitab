@@ -25,6 +25,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install --no-install-recommends -y libegl1 libgl1 libxkbcommon0 libdbus-1-3 libglib2.0-0 libfontconfig1 libfreetype6 libgssapi-krb5-2
         python -m pip install --quiet PyQt6
-        python -m unittest discover --verbose
+        python -m unittest tests.test_api tests.test_process tests.test_worker tests.test_cli tests.test_paste tests.test_vad tests.test_hotkey tests.test_hub
     secrets:
       token: ${{ secrets.GITHUB_TOKEN }}
