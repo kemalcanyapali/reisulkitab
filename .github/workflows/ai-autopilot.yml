@@ -1,0 +1,30 @@
+name: AI Safe Autopilot
+
+on:
+  push:
+    branches:
+      - "ai/**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  safe-autopilot:
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    uses: kemalcanyapali/ai-safe-autopilot/.github/workflows/safe-autopilot.yml@v1.0.1
+    with:
+      validation-command: |
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends -y libegl1 libgl1 libxkbcommon0 libdbus-1-3 libglib2.0-0 libfontconfig1 libfreetype6 libgssapi-krb5-2
+        python -m pip install --quiet PyQt6
+        python -m unittest discover --verbose
+    secrets:
+      token: ${{ secrets.GITHUB_TOKEN }}
