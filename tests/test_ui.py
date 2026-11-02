@@ -39,6 +39,7 @@ CHANGED = {
     "paste_shortcut": "ctrl+shift+v",
     "restore_clipboard": True,
     "overlay_corner": "top-right",
+    "overlay_size": 200,
     "max_seconds": 120,
     "skip_silent": False,
     "silence_db": -42.0,
@@ -814,18 +815,23 @@ class Overlay(AppTest):
                     else:
                         self.assertEqual(geometry.y(), area.bottom() - widget.height() - overlay_module.MARGIN)
 
-    def test_compact_dictation_does_not_compress_meetings_or_errors(self):
-        widget = self.overlay()
-        widget.show_recording()
-        self.assertEqual((widget.width(), widget.height()), (122, 36))
-        widget.show_busy("Transcribing…")
-        self.assertEqual((widget.width(), widget.height()), (86, 36))
-        widget.show_meeting()
-        self.assertGreater(widget.width(), 122)
-        self.assertGreater(widget.height(), 36)
-        widget.show_error("No microphone is available")
-        self.assertGreater(widget.width(), 122)
-        self.assertEqual(widget.accessibleName(), "No microphone is available")
+    def test_size_scales_recording_and_processing_without_scaling_messages(self):
+        small = self.overlay(size=100)
+        large = self.overlay(size=200)
+        for state in ("recording", "busy"):
+            for widget in (small, large):
+                if state == "recording":
+                    widget.show_recording()
+                else:
+                    widget.show_busy("Transcribing…")
+            self.assertEqual(large.size(), small.size() * 2)
+            image = large.grab().toImage()
+            self.assertGreater(image.pixelColor(image.width() // 2,
+                                                image.height() // 2).alpha(), 0)
+        for widget in (small, large):
+            widget.show_error("No microphone")
+        self.assertEqual(large.size(), small.size())
+
 
     def test_a_warning_and_an_error_both_show(self):
         widget = self.overlay()

@@ -103,11 +103,11 @@ class Reisulkuttab:
         # started it cannot stop the one that came after.
         self._run_id = 0
 
-        self.overlay = Overlay(self.conf["overlay_corner"])
+        self.overlay = Overlay(self.conf["overlay_corner"], size=self.conf["overlay_size"])
         # The agent's indicator sits on top of the dictation one when both are
         # up, and drops into the corner when it is alone there.
         self.ask_overlay = Overlay(self.conf["overlay_corner"], below=self.overlay,
-                                   dismissable=True)
+                                   dismissable=True, size=self.conf["overlay_size"])
         self.recorder = audio.Recorder()
         self.pipeline = Pipeline(self.conf)
         self.ask_pipeline = Pipeline(self.conf)
@@ -967,8 +967,13 @@ class Reisulkuttab:
             threading.Thread(target=warm, daemon=True).start()
 
     def _apply_settings(self):
-        self.overlay.corner = self.conf["overlay_corner"]
-        self.ask_overlay.corner = self.conf["overlay_corner"]
+        for indicator in (self.overlay, self.ask_overlay):
+            indicator.corner = self.conf["overlay_corner"]
+            indicator.size_percent = self.conf["overlay_size"]
+            if indicator.showing:
+                indicator._resize_to_content()
+                indicator._reposition()
+                indicator.update()
         self._apply_local()
         self._build_tray()
         self._refresh_tray()

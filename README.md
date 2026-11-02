@@ -121,11 +121,15 @@ Select a section with the mouse or the arrow keys while the sidebar has focus.
 The Save button stays below the scrolling page and keeps the window open after
 saving. The shell follows the system light/dark palette.
 
-The recording indicator follows Hex's 112×26 dot-scope capsule: a 43×9 pearl
-waveform grows out from the voice's centre, with a compact blue flow while
-transcribing. General → Indicator position offers top/bottom centre and the
-existing corners; saved positions are preserved. Meetings keep their separate
-microphone/speaker traces and elapsed clock. Completion, warnings and errors
+The recording indicator uses a 43×9 pearl dot waveform, with a blue flow while
+transcribing. It now opens at 150% of Hex's original 112×26 capsule size.
+**Settings → General → Recording indicator size** (Turkish: **Ayarlar → Genel →
+Kayıt göstergesi boyutu**) adjusts recording and transcription from 100% to 250%.
+The adjacent **Indicator position / Gösterge konumu** chooses top/bottom centre or
+one of four corners. **Save / Kaydet** applies both immediately to a visible
+indicator and remembers them for future launches; existing positions are preserved.
+Meetings keep their separate microphone/speaker traces and elapsed clock.
+Completion, warnings and errors
 remain readable, including click-to-dismiss long-running processing indicators
 and completion notifications. Model providers, credentials, recordings and
 history retain their existing behavior.

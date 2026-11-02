@@ -58,6 +58,13 @@ class Loading(AppTest):
         self.write_config({"overlay_corner": "bottom-right"})
         self.assertEqual(cfg.Config()["overlay_corner"], "bottom-right")
 
+    def test_indicator_size_is_safe_when_loading_manual_settings(self):
+        for value, expected in ((0, 100), (500, 250), (175, 175),
+                                ("200", 150), (None, 150), (True, 150)):
+            with self.subTest(value=value):
+                self.write_config({"overlay_size": value})
+                self.assertEqual(cfg.Config()["overlay_size"], expected)
+
     def test_a_default_prompt_an_old_version_copied_in_is_dropped(self):
         """Otherwise it shadows every later improvement to that default."""
         old = "the 1.2 default prompt, whatever it said"

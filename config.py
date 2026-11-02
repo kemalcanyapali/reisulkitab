@@ -568,6 +568,7 @@ DEFAULTS = {
     "evdev_hotkey": False,
     "dictation_enabled": True,
     "overlay_corner": "bottom-center",
+    "overlay_size": 150,
     "keep_audio": False,
     "history_limit": 200,
     "file_timestamps": False,
@@ -789,6 +790,10 @@ class Config:
             self.data["hotkey_mode"] = "toggle"
         self.data["overlay_corner"] = _CORNER_MIGRATION.get(
             self.data["overlay_corner"], self.data["overlay_corner"]
+        )
+        size = self.data["overlay_size"]
+        self.data["overlay_size"] = (
+            max(100, min(250, size)) if type(size) is int else DEFAULTS["overlay_size"]
         )
         stored_prompt = self.data["cleanup_prompt"].strip()
         for variable, setting in _ENV_SETTINGS.items():

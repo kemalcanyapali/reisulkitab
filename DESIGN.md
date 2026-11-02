@@ -70,7 +70,7 @@ Rail ≤184px that yields width before the content does; rows ≈32px with drawn
 
 ## Shapes
 
-Descending radius ladder: card 12 → group 10 → inset 8 → button/nav 7 → tab 6. Dictation's plate is Hex's 112×26px capsule; processing is 76×26px. Meeting and message plates remain 48px tall. Nav selection is a soft rounded fill, never an accent bar. Focus rings are pre-drawn transparent borders that turn `focus`, so focus moves nothing.
+Descending radius ladder: card 12 → group 10 → inset 8 → button/nav 7 → tab 6. Dictation's logical plate is Hex's 112×26px capsule; processing is 76×26px. Both render at 150% by default, configurable from 100% to 250% in General; dots, capsule and shadow scale together. Meeting and message plates remain 48px tall. Nav selection is a soft rounded fill, never an accent bar. Focus rings are pre-drawn transparent borders that turn `focus`, so focus moves nothing.
 
 ## Components
 
