@@ -7,6 +7,7 @@ NAME = "Reisülküttab"
 SLUG = "reisulkuttab"
 EXECUTABLE = "Reisulkuttab"
 APP_ID = "KemalcanYapali.Reisulkuttab"
+VERSION = "1.1.0"
 
 
 def asset(name):

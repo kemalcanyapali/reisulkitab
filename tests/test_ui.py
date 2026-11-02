@@ -13,7 +13,7 @@ import types
 from typing import ClassVar
 from unittest import mock
 
-from PyQt6.QtCore import QRect
+from PyQt6.QtCore import QObject, QRect, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 import cleanup
@@ -29,9 +29,9 @@ from tests.support import AppTest, only_these_tools
 _app = QApplication.instance() or QApplication([])
 
 
-# A valid non-default value for every setting the window shows. Anything the
-# window does not touch is left out: the round trip cannot lose what it never
-# reads.
+# A valid non-default value for every setting the window shows. The agent's
+# own settings are in here too, although no page shows them anymore: a save
+# must carry them over untouched, which is what the round trip below proves.
 CHANGED = {
     "ui_language": "tr",
     "language": "tr",
@@ -133,8 +133,31 @@ class Settings(AppTest):
     def test_the_window_opens_with_every_tab_on_it(self):
         window = self.window(cfg.Config())
         tabs = window.findChildren(settings_ui.QTabWidget)[0]
-        self.assertEqual(tabs.count(), 9)
+        self.assertEqual(tabs.count(), 8)
         self.assertEqual(window.windowTitle(), "Reisülküttab Settings")
+
+    def test_there_is_no_agent_page_or_shortcut_left_anywhere(self):
+        """The agent is reached from the terminal only: no tab, no widget,
+        no shortcut row and no desktop registration for it."""
+        window = self.window(cfg.Config())
+        tabs = window.findChildren(settings_ui.QTabWidget)[0]
+        titles = [tabs.tabText(index) for index in range(tabs.count())]
+        self.assertNotIn("Agent", titles)
+        self.assertNotIn("ask", window._shortcut_rows)
+        self.assertNotIn("ask", hotkey.SHORTCUTS)
+        for gone in ("assistant_provider", "assistant_prompt",
+                     "assistant_session_minutes"):
+            self.assertFalse(hasattr(window, gone), gone)
+
+    def test_accessibility_selection_changes_the_visible_section(self):
+        from PyQt6.QtCore import QItemSelectionModel
+
+        window = self.window(cfg.Config())
+        window.tabs.setCurrentIndex(window.api_tab_index)
+        first = window.nav.model().index(0, 0)
+        window.nav.selectionModel().select(
+            first, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        self.assertEqual(window.tabs.currentIndex(), 0)
 
     def test_model_edit_survives_sidebar_navigation_and_save(self):
         from PyQt6.QtCore import Qt
@@ -184,10 +207,10 @@ class Settings(AppTest):
         _app.processEvents()
         area = window.tabs.currentWidget()
         self.assertGreater(area.verticalScrollBar().maximum(), 0)
-        window.assistant_prompt.setFocus(settings_ui.Qt.FocusReason.TabFocusReason)
-        area.ensureWidgetVisible(window.assistant_prompt)
+        window.meeting_prompt.setFocus(settings_ui.Qt.FocusReason.TabFocusReason)
+        area.ensureWidgetVisible(window.meeting_prompt)
         _app.processEvents()
-        self.assertTrue(window.assistant_prompt.hasFocus())
+        self.assertTrue(window.meeting_prompt.hasFocus())
         self.assertGreater(area.verticalScrollBar().value(), 0)
 
     def test_initial_window_fits_the_screen_under_the_pointer(self):
@@ -333,16 +356,37 @@ class Settings(AppTest):
 
     def test_emptying_a_shortcut_turns_it_off_but_not_the_toggle(self):
         """The application is unusable without the toggle, so that one box
-        falls back. The rest stay empty, which is how they are switched off."""
-        conf = cfg.Config()
+        falls back. The rest stay empty, which is how they are switched off.
+        The agent's shortcut has no box anymore, and its stored value — like
+        every other agent setting — has to ride along untouched."""
+        conf = self.config(assistant_shortcut="Meta+A")
         window = self.window(conf)
         for box, _status, _missing in window._shortcut_rows.values():
             box.setCurrentText("")
         window._save()
         self.assertEqual(conf["shortcut"], "Ctrl+Space")
         self.assertEqual(conf["cancel_shortcut"], "")
-        self.assertEqual(conf["assistant_shortcut"], "")
+        self.assertEqual(conf["assistant_shortcut"], "Meta+A")
         self.assertEqual(conf["meeting_shortcut"], "")
+
+    def test_the_hidden_agent_settings_survive_a_save(self):
+        """No page shows them, so Save must carry them over as they are."""
+        conf = self.config(assistant_provider="codex",
+                           assistant_codex_model="gpt-5",
+                           assistant_reasoning="high",
+                           assistant_dir="/tmp",
+                           assistant_prompt="Answer in one sentence.",
+                           assistant_shortcut="Meta+A")
+        self.window(conf)._save()
+        reloaded = cfg.Config()
+        for key, value in (("assistant_provider", "codex"),
+                           ("assistant_codex_model", "gpt-5"),
+                           ("assistant_reasoning", "high"),
+                           ("assistant_dir", "/tmp"),
+                           ("assistant_prompt", "Answer in one sentence."),
+                           ("assistant_shortcut", "Meta+A")):
+            with self.subTest(key=key):
+                self.assertEqual(reloaded[key], value)
 
     def test_installing_the_discard_key_writes_its_own_entry(self):
         conf = cfg.Config()
@@ -364,7 +408,6 @@ class Settings(AppTest):
         self.window(conf)._save()
         self.assertEqual(conf["cleanup_prompt"], "")
         self.assertEqual(conf["meeting_prompt"], "")
-        self.assertEqual(conf["assistant_prompt"], "")
 
     def test_each_provider_keeps_its_own_transcription_model(self):
         self.write_config({"transcribe_provider": "openai",
@@ -470,14 +513,14 @@ class WindowsSettings(Settings):
     platform = "win32"
 
     def test_emptying_a_shortcut_turns_it_off_but_not_the_toggle(self):
-        conf = cfg.Config()
+        conf = self.config(assistant_shortcut="Meta+A")
         window = self.window(conf)
         for box, _status, _missing in window._shortcut_rows.values():
             box.setCurrentText("")
         window._save()
         self.assertEqual(conf["shortcut"], "Ctrl+Alt+D")
         self.assertEqual(conf["cancel_shortcut"], "")
-        self.assertEqual(conf["assistant_shortcut"], "")
+        self.assertEqual(conf["assistant_shortcut"], "Meta+A")
         self.assertEqual(conf["meeting_shortcut"], "")
 
     def test_windows_shortcuts_are_active_without_install_buttons(self):
@@ -518,6 +561,182 @@ class MacSettings(Settings):
         offered = [window.paste_shortcut.itemText(index)
                    for index in range(window.paste_shortcut.count())]
         self.assertEqual(offered, paste.MACOS.shortcuts)
+
+
+class FakeUpdater(QObject):
+    """The updater as the settings window sees it, dial in hand."""
+
+    changed = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.state = "idle"
+        self.latest_version = ""
+        self.message = ""
+        self.supported = True
+        self.can_update = False
+        self.checks = 0
+        self.installs = 0
+
+    def check(self):
+        self.checks += 1
+
+    def install(self):
+        self.installs += 1
+
+
+class UpdateControls(AppTest):
+    def setUp(self):
+        super().setUp()
+        self.enterContext(mock.patch.object(sys, "platform", "linux"))
+        self.enterContext(only_these_tools())
+        self.enterContext(mock.patch.object(settings_ui.SettingsWindow, "_load_models"))
+        self.enterContext(mock.patch.object(settings_ui.SettingsWindow, "_load_transcribe_models"))
+
+    def window_with(self, updater):
+        window = settings_ui.SettingsWindow(cfg.Config(), None, updater)
+        self.addCleanup(window.deleteLater)
+        self.addCleanup(window.close)
+        return window
+
+    def test_a_check_is_offered_before_anything_can_be_installed(self):
+        updater = FakeUpdater()
+        window = self.window_with(updater)
+        self.assertTrue(window.update_check_button.isEnabled())
+        self.assertFalse(window.update_button.isEnabled())
+        window.update_button.click()
+        self.assertEqual(updater.installs, 0)
+
+    def test_the_buttons_follow_the_updater_state(self):
+        updater = FakeUpdater()
+        window = self.window_with(updater)
+        window.update_check_button.click()
+        self.assertEqual(updater.checks, 1)
+
+        updater.state = "available"
+        updater.latest_version = "9.9.9"
+        updater.can_update = True
+        updater.changed.emit()
+        self.assertTrue(window.update_button.isEnabled())
+        window.update_button.click()
+        self.assertEqual(updater.installs, 1)
+
+        updater.state = "downloading"
+        updater.changed.emit()
+        self.assertFalse(window.update_check_button.isEnabled())
+        self.assertFalse(window.update_button.isEnabled())
+
+    def test_nonstandard_installation_can_check_but_cannot_install(self):
+        updater = FakeUpdater()
+        updater.supported = False
+        updater.state = "available"
+        window = self.window_with(updater)
+        self.assertFalse(window.update_box.isHidden())
+        self.assertTrue(window.update_check_button.isEnabled())
+        self.assertFalse(window.update_button.isEnabled())
+        window.update_button.click()
+        self.assertEqual(updater.installs, 0)
+
+
+class TrayMenu(AppTest):
+    def controller(self):
+        controller = object.__new__(reisulkuttab.Reisulkuttab)
+        controller.conf = cfg.Config()
+        controller.state = controller.ask_state = reisulkuttab.IDLE
+        controller.meeting_state = reisulkuttab.M_IDLE
+        controller.recorder_owner = None
+        controller.tray = mock.Mock()
+        controller._set_icon = mock.Mock()
+        controller.updater = mock.Mock()
+        controller.app = mock.Mock()
+        with mock.patch.object(reisulkuttab.sys, "platform", "linux"):
+            controller._build_tray()
+        self.addCleanup(controller.menu.deleteLater)
+        controller._refresh_tray()
+        return controller
+
+    def test_the_menu_has_no_way_in_for_the_agent(self):
+        texts = [action.text() for action in self.controller().menu.actions()]
+        self.assertFalse([text for text in texts
+                          if "Ask" in text or "conversation" in text.lower()])
+        self.assertIn("Check for updates", texts)
+
+    def test_the_check_waits_while_one_is_under_way(self):
+        controller = self.controller()
+        controller.updater.state = "checking"
+        controller._on_update_state()
+        self.assertFalse(controller.update_action.isEnabled())
+        controller.updater.state = "idle"
+        controller._on_update_state()
+        self.assertTrue(controller.update_action.isEnabled())
+
+    def test_a_finished_check_says_what_it_found(self):
+        controller = self.controller()
+        controller.updater.state = "available"
+        controller.updater.latest_version = "9.9.9"
+        controller._on_update_state()
+        self.assertIn("9.9.9", controller.tray.showMessage.call_args.args[1])
+
+
+class UpdateGuard(AppTest):
+    """What the updater is told about the process it may replace."""
+
+    def controller(self, **busy):
+        controller = object.__new__(reisulkuttab.Reisulkuttab)
+        controller.conf = {"mic_target": "", "max_seconds": 30}
+        controller.state = busy.get("dictation", reisulkuttab.IDLE)
+        controller.ask_state = busy.get("ask", reisulkuttab.IDLE)
+        controller.meeting_state = busy.get("meeting", reisulkuttab.M_IDLE)
+        controller.recorder_owner = None
+        controller.pipeline = mock.Mock(busy=busy.get("pipeline", False))
+        controller.ask_pipeline = mock.Mock(busy=False)
+        controller.meetings = mock.Mock(busy=busy.get("meetings", False))
+        controller.settings_window = None
+        controller.updater = types.SimpleNamespace(state="idle")
+        return controller
+
+    def test_an_idle_process_may_install_an_update(self):
+        self.assertTrue(self.controller()._can_install_update())
+
+    def test_anything_running_holds_the_update_back(self):
+        for busy in ({"dictation": reisulkuttab.BUSY},
+                     {"ask": reisulkuttab.BUSY},
+                     {"meeting": reisulkuttab.M_WORKING},
+                     {"pipeline": True},
+                     {"meetings": True}):
+            with self.subTest(busy=busy):
+                self.assertFalse(self.controller(**busy)._can_install_update())
+
+    def test_a_model_download_in_the_settings_window_holds_it_back_too(self):
+        controller = self.controller()
+        controller.settings_window = types.SimpleNamespace(
+            transcriber=mock.Mock(busy=False),
+            local_whisper=mock.Mock(busy=True),
+            local_llm=mock.Mock(busy=False),
+        )
+        self.assertFalse(controller._can_install_update())
+
+    def test_no_new_recording_starts_while_an_update_installs(self):
+        controller = self.controller()
+        controller.updater = types.SimpleNamespace(state="installing")
+        controller.recorder = mock.Mock()
+        controller.start()
+        controller.start_ask()
+        controller.start_meeting()
+        self.assertEqual(controller.state, reisulkuttab.IDLE)
+        self.assertEqual(controller.meeting_state, reisulkuttab.M_IDLE)
+        controller.recorder.start.assert_not_called()
+
+    def test_a_request_off_the_socket_cannot_start_one_either(self):
+        controller = self.controller()
+        controller.updater = types.SimpleNamespace(state="installing")
+        controller.recorder = mock.Mock()
+        controller.paste_override = {}
+        controller._waiters = {}
+        replied = []
+        controller._dictation_request("start", {}, replied.append)
+        self.assertEqual(replied[0]["state"], reisulkuttab.IDLE)
+        controller.recorder.start.assert_not_called()
 
 
 class Overlay(AppTest):

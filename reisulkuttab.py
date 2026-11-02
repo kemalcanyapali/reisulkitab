@@ -41,13 +41,14 @@ from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon  # noqa: E402
 import brand  # noqa: E402
 import assistant  # noqa: E402
 import audio  # noqa: E402
+import cleanup  # noqa: E402
 import cli  # noqa: E402
 import config as cfg  # noqa: E402
 import ggml  # noqa: E402
 import hotkey  # noqa: E402
-import i18n  # noqa: E402
 import ipc  # noqa: E402
 import meeting  # noqa: E402
+import updater  # noqa: E402
 import worker  # noqa: E402
 from i18n import t  # noqa: E402
 from meeting import MeetingPipeline  # noqa: E402
@@ -149,6 +150,11 @@ class Reisulkuttab:
         self.meeting_ticker = QTimer()
         self.meeting_ticker.setInterval(500)
         self.meeting_ticker.timeout.connect(self._meeting_tick)
+        # Before the tray, whose menu offers the check: the updater asks what
+        # is running whenever it acts, and it has to exist before anything
+        # that answer would mention can start.
+        self.updater = updater.Updater(self._can_install_update)
+        self.updater.changed.connect(self._on_update_state)
 
         self.tray = QSystemTrayIcon()
         self._apply_settings()
@@ -169,20 +175,6 @@ class Reisulkuttab:
         self.toggle_action = QAction(t("Start recording"), self.menu)
         self.toggle_action.triggered.connect(self._toggle)
         self.menu.addAction(self.toggle_action)
-
-        # Named in _refresh_tray, which is where the chosen provider is known.
-        self.ask_action = QAction("", self.menu)
-        self.ask_action.triggered.connect(self._toggle_ask)
-        self.menu.addAction(self.ask_action)
-
-        self.reset_action = QAction(t("Start a new conversation"), self.menu)
-        self.reset_action.triggered.connect(self.reset_conversation)
-        self.menu.addAction(self.reset_action)
-
-        self.ask_cancel_action = QAction("", self.menu)
-        self.ask_cancel_action.triggered.connect(self.cancel_ask)
-        self.ask_cancel_action.setEnabled(False)
-        self.menu.addAction(self.ask_cancel_action)
 
         self.cancel_action = QAction(t("Discard the recording"), self.menu)
         # The inner method, so that a menu click is never mistaken for the KDE
@@ -205,6 +197,13 @@ class Reisulkuttab:
         self.settings_action = QAction(t("Settings…"), self.menu)
         self.settings_action.triggered.connect(self.open_settings)
         self.menu.addAction(self.settings_action)
+
+        # The agent has no tray actions anymore: it is reached from the
+        # terminal, under `reisulkuttab ask`. A version check is the one
+        # thing the menu itself can usefully offer.
+        self.update_action = QAction(t("Check for updates"), self.menu)
+        self.update_action.triggered.connect(self.updater.check)
+        self.menu.addAction(self.update_action)
 
         self.restart_action = QAction(t("Restart"), self.menu)
         self.restart_action.triggered.connect(self.restart)
@@ -244,6 +243,60 @@ class Reisulkuttab:
             icon = QIcon(str(brand.asset("reisulkuttab.png")))
         self.tray.setIcon(icon)
 
+    # ---- update ---------------------------------------------------------
+
+    def _can_install_update(self):
+        """Whether the updater may quit this process where it stands.
+
+        Anything still running would be cut short by the restart: a recording,
+        a transcript on its way, a meeting being written up, a file being
+        transcribed or a model still downloading in the settings window. All
+        of it is read off live flags rather than remembered, because the
+        answer has to be true at the moment the updater acts on it.
+        """
+        transcriber = (self.settings_window.transcriber
+                       if self.settings_window is not None else None)
+        downloading = (self.settings_window is not None
+                       and (self.settings_window.local_whisper.busy
+                            or self.settings_window.local_llm.busy))
+        return (self.state == IDLE and self.ask_state == IDLE
+                and self.meeting_state == M_IDLE
+                and not self.pipeline.busy and not self.ask_pipeline.busy
+                and not self.meetings.busy
+                and not downloading
+                and (transcriber is None or not transcriber.busy))
+
+    def _update_installing(self):
+        """True in the short window between the updater handing the process
+        over and the quit: no new recording may start inside it."""
+        return self.updater is not None and self.updater.state == "installing"
+
+    def _on_update_state(self):
+        """Say what a check found, where the check was asked for."""
+        state = self.updater.state
+        if state == "available":
+            self.tray.showMessage(
+                t("Reisülküttab: a new version is available"),
+                t("Version {version} is available.",
+                  version=self.updater.latest_version),
+                QSystemTrayIcon.MessageIcon.Information, 8000,
+            )
+        elif state == "current":
+            self.tray.showMessage(
+                "Reisülküttab", t("Reisülküttab is up to date."),
+                QSystemTrayIcon.MessageIcon.Information, 5000,
+            )
+        elif state == "error" and self.updater.message:
+            self.tray.showMessage("Reisülküttab", self.updater.message,
+                                  QSystemTrayIcon.MessageIcon.Warning, 8000)
+
+        # The menu's own check waits with everything else while one is under
+        # way, so a second click cannot land on top of the first.
+        action = getattr(self, "update_action", None)
+        if action is not None:
+            action.setEnabled(
+                state not in ("checking", "downloading", "installing"))
+
     # ---- state ----------------------------------------------------------
 
     @property
@@ -277,7 +330,6 @@ class Reisulkuttab:
             BUSY: ("Working…", "view-refresh", "Reisülküttab: working"),
         }
         label, icon, tip = labels[self.state]
-        agent = assistant.display_name(self.conf)
 
         self.toggle_action.setText(t(label))
         # Free while the other one is thinking, blocked only while it is holding
@@ -287,26 +339,8 @@ class Reisulkuttab:
             and (self.state == RECORDING
                  or (self.state == IDLE and not self.recording))
         )
-        asked = i18n.name(agent, "dative")
-        self.ask_action.setText(
-            t("Stop and ask {name}", name=asked) if self.ask_state == RECORDING
-            else t("Ask {name}", name=asked)
-        )
-        self.ask_action.setEnabled(
-            self.ask_state == RECORDING
-            or (self.ask_state == IDLE and not self.recording)
-        )
-        self.reset_action.setEnabled(self.ask_state != BUSY)
-        self.cancel_action.setEnabled(self.recording)
-        # A command to the agent is the one job long enough to be worth calling
-        # off once it is already running.
-        self.ask_cancel_action.setText(
-            t("Stop {name}", name=i18n.name(agent, "accusative"))
-        )
-        self.ask_cancel_action.setEnabled(self.ask_state == BUSY)
-
-        # The agent speaks through the icon only when dictation has nothing to
-        # say, since dictation is the one being waited on in front of a screen.
+        # A run started from the terminal still speaks through the icon when
+        # dictation has nothing to say: it is the one being waited on.
         if self.state == IDLE and self.ask_state != IDLE:
             if self.ask_state == RECORDING:
                 icon, tip = "media-record", "Reisülküttab: recording for Claude"
@@ -391,8 +425,7 @@ class Reisulkuttab:
         if timer is None:
             timer = self.last_evdev[name] = QElapsedTimer()
         timer.restart()
-        handlers = {"meeting": self._toggle_meeting, "ask": self._toggle_ask,
-                    "cancel": self._cancel}
+        handlers = {"meeting": self._toggle_meeting, "cancel": self._cancel}
         handlers.get(name, self._toggle)()
 
     def _on_hotkey_released(self, name):
@@ -513,6 +546,9 @@ class Reisulkuttab:
         return {
             "ok": True,
             "running": True,
+            # The build's own version, so the update helper can tell the
+            # binary it just started from the one it replaced.
+            "version": brand.VERSION,
             "dictation": self.state,
             "ask": self.ask_state,
             "meeting": self.meeting_state,
@@ -554,14 +590,14 @@ class Reisulkuttab:
         return False
 
     def start(self):
-        if self.state != IDLE or self.recording:
+        if self.state != IDLE or self.recording or self._update_installing():
             return
         self.overlay.show_recording()
         self._set_state(RECORDING)
         self._begin_recording(DICTATION)
 
     def start_ask(self):
-        if self.ask_state != IDLE or self.recording:
+        if self.ask_state != IDLE or self.recording or self._update_installing():
             return
         self.ask_overlay.show_recording(asking=True)
         self._set_ask_state(RECORDING)
@@ -651,7 +687,7 @@ class Reisulkuttab:
             self.stop_meeting()
 
     def start_meeting(self):
-        if self.meeting_state != M_IDLE:
+        if self.meeting_state != M_IDLE or self._update_installing():
             return
         base = meeting.new_base()
         _, wav_path = cfg.meeting_paths(base)
@@ -884,7 +920,8 @@ class Reisulkuttab:
 
     def open_settings(self):
         if self.settings_window is None:
-            self.settings_window = SettingsWindow(self.conf, self.meetings)
+            self.settings_window = SettingsWindow(self.conf, self.meetings,
+                                                  self.updater)
             self.settings_window.applied.connect(self._apply_settings)
             self.settings_window.finished.connect(self._settings_closed)
         self.settings_window.show()

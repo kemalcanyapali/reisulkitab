@@ -30,11 +30,32 @@ The installer copies the complete onedir package to `%LOCALAPPDATA%\Programs\rei
 
 ### Update
 
-Give your coding agent this request:
+From version 1.1.0, open **Settings → General → Updates** (Turkish:
+**Ayarlar → Genel → Güncellemeler**) and choose **Check for updates** /
+**Güncellemeleri kontrol et**. When a newer release is available, choose
+**Update** / **Güncelle**. The tray also offers the update check.
 
-> Update my Reisülküttab installation from `https://github.com/kemalcanyapali/reisulkitab`. Use the existing clone if present; otherwise clone the repository. Pull `main` with `git pull --ff-only`, run `build-windows.ps1`, then run `install-windows.ps1`. Preserve my settings and user data under `%APPDATA%\reisulkuttab` and `%LOCALAPPDATA%\reisulkuttab`.
+Save any edited settings first. Checking and downloading do not block the UI.
+If recording, transcription, meeting processing or model downloads are busy,
+finish the task and click Update again. A verified installation restarts the app.
+Nothing downloads or installs without your click.
 
-The equivalent manual commands, run inside the repository, are:
+The standard Windows installation downloads only this repository's stable
+[GitHub releases](https://github.com/kemalcanyapali/reisulkitab/releases), verifies
+SHA-256 and archive paths, and replaces only the application directory. Provider
+choices, model files, credentials, recordings and history stay in the existing
+profile. HTTPS and the GitHub repository are the trust boundary; the packages
+are not Authenticode-signed.
+
+The previous application is kept until the replacement answers with the expected
+version. A failed swap/start restores it where possible; a readiness timeout keeps
+the backup at `%LOCALAPPDATA%\Programs\reisulkuttab.previous` and reports the
+failure instead of force-killing a process. Details are in
+`%LOCALAPPDATA%\Programs\reisulkuttab-update.log`. Do not discard that backup
+until the new version works. A retained backup blocks another replacement.
+
+Older versions need this one-time manual bootstrap. Source and nonstandard
+installations can check for releases but do not replace themselves:
 
 ```powershell
 git pull --ff-only
@@ -83,7 +104,10 @@ Meeting capture uses Windows WASAPI loopback for speaker output. It normally nee
 
 ## Interface
 
-The settings window uses a Hex-inspired sidebar with all nine existing sections.
+The settings window uses a Hex-inspired sidebar with eight sections. The unused
+Agent page, voice-agent tray actions and desktop hotkey entry point are removed.
+Existing CLI `ask` commands and the Claude/Codex/OpenRouter integrations used
+by transcript cleanup and meeting notes remain available.
 Select a section with the mouse or the arrow keys while the sidebar has focus.
 The Save button stays below the scrolling page and keeps the window open after
 saving. The shell follows the system light/dark palette.
@@ -91,8 +115,8 @@ saving. The shell follows the system light/dark palette.
 The recording indicator uses a compact dot waveform, with separate microphone
 and speaker traces for meetings. Processing, completion, warnings and errors
 retain their existing behavior, including click-to-dismiss processing indicators
-and completion notifications. Model providers, credentials, shortcuts, recordings
-and history are unchanged by this visual update.
+and completion notifications. Model providers, credentials, recordings and
+history retain their existing behavior.
 
 Visual reference: [anomalyco/hex](https://github.com/anomalyco/hex), specifically
 its settings sidebar and Dot scope HUD. Reisülküttab remains a Python/PyQt6

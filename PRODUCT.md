@@ -8,13 +8,14 @@ Windows desktop (Python/PyQt6; not a web or mobile application).
 
 ## Product Purpose
 
-Reisülküttab provides shortcut-driven dictation, meeting capture, file transcription, transcript cleanup and agent commands from a Windows system-tray application.
+Reisülküttab provides shortcut-driven dictation, meeting capture, file transcription and transcript cleanup from a Windows system-tray application.
 
 ## Capabilities and Constraints
 
 - Preserve existing model/provider selection, credentials, configuration, recordings and history.
-- Preserve recording, transcription, cleanup, meeting and agent behavior during UI changes.
-- Keep all nine settings pages, their controls, translations and save behavior available.
+- Preserve recording, transcription, cleanup and meeting behavior; keep their existing model integrations.
+- Keep eight settings pages. The user removed the desktop Agent page, tray actions and hotkey; existing CLI commands and saved configuration remain intact.
+- Offer explicit update checking and user-triggered Windows installation; never interrupt active work or replace profile/model data.
 - Keep keyboard navigation, screen fitting and non-focus-stealing recording indicators.
 - Local processing and optional hosted providers retain their existing privacy boundaries; the UI must not claim that all processing is always local.
 

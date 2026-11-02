@@ -394,8 +394,8 @@ def _stream(cmd, conf, on_event, should_stop):
     binary = resolved_executable(cmd[0])
     if not binary:
         raise AssistantError(t(
-            "{binary} not found. Install it, or pick another provider under "
-            "Settings.", binary=cmd[0],
+            "{binary} not found. Install it before running this command.",
+            binary=cmd[0],
         ))
     cmd[0] = binary
     try:

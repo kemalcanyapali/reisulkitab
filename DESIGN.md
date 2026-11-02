@@ -45,9 +45,10 @@ components:
 A native Windows (PyQt6) shell with a flat navigation rail, one rounded content surface, fine borders and system typography. Custom shell surfaces are neutral; native inputs retain the Windows accent color. The recording overlay is a near-black pill with a dot waveform and semantic state colors.
 
 **Key Characteristics:**
-- Two-pane shell: rail of nine pages + one content card; hairline borders; zero shadows.
+- Two-pane shell: rail of eight pages + one content card; hairline borders; zero shadows.
 - Neutral custom shell surfaces; native controls keep the system accent.
 - Follows the OS scheme (sheet rebuilt on ApplicationPaletteChange); input controls stay native.
+- General includes installed version, update status, Check/Update controls and a save-before-restart note. Busy, unsupported and failed updates explain their limits without hiding the check.
 
 ## Colors
 

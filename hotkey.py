@@ -31,7 +31,6 @@ from i18n import t
 DESKTOP_ID = "reisulkuttab-toggle.desktop"
 CANCEL_DESKTOP_ID = "reisulkuttab-cancel.desktop"
 MEETING_DESKTOP_ID = "reisulkuttab-meeting.desktop"
-ASK_DESKTOP_ID = "reisulkuttab-ask.desktop"
 APPLICATIONS_DIR = pathlib.Path.home() / ".local/share/applications"
 DESKTOP_FILE = APPLICATIONS_DIR / DESKTOP_ID
 SHORTCUTS_FILE = pathlib.Path.home() / ".config/kglobalshortcutsrc"
@@ -40,18 +39,17 @@ GNOME_BINDING_SCHEMA = "org.gnome.settings-daemon.plugins.media-keys.custom-keyb
 
 Shortcut = collections.namedtuple("Shortcut", "verb desktop_id name setting fallback")
 
-# Every global shortcut in one place, because there are four of them and the
+# Every global shortcut in one place, because there are three of them and the
 # command line, the settings window and the installer each used to carry their
 # own copy of the list. `fallback` is what to register when the setting is
 # empty: only the toggle has one, since it is the key the application is
-# unusable without.
+# unusable without. The voice agent has no desktop shortcut anymore: it is
+# reached from the terminal, under `reisulkuttab ask`.
 SHORTCUTS = {
     "toggle": Shortcut("toggle", DESKTOP_ID, "Reisülküttab: start/stop recording",
                        "shortcut", "Ctrl+Space"),
     "cancel": Shortcut("cancel", CANCEL_DESKTOP_ID, "Reisülküttab: discard the recording",
                        "cancel_shortcut", ""),
-    "ask": Shortcut("ask", ASK_DESKTOP_ID, "Reisülküttab: ask Claude Code",
-                    "assistant_shortcut", ""),
     "meeting": Shortcut("meeting", MEETING_DESKTOP_ID,
                         "Reisülküttab: start/end a meeting recording",
                         "meeting_shortcut", ""),
