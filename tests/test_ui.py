@@ -136,6 +136,28 @@ class Settings(AppTest):
         self.assertEqual(tabs.count(), 9)
         self.assertEqual(window.windowTitle(), "Reisülküttab Settings")
 
+    def test_model_edit_survives_sidebar_navigation_and_save(self):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtTest import QTest
+
+        window = self.window(self.config(transcribe_provider="openai",
+                                         cleanup_provider="claude"))
+        window.show()
+        _app.processEvents()
+        window.nav.setCurrentRow(window.api_tab_index)
+        window.transcribe_model.setEditText("my-selected-transcription-model")
+        window.nav.setFocus()
+        QTest.keyClick(window.nav, Qt.Key.Key_Down)
+        self.assertTrue(window.cleanup_prompt.isVisible())
+        QTest.keyClick(window.nav, Qt.Key.Key_Up)
+        self.assertTrue(window.transcribe_model.isVisible())
+        save = window.findChild(settings_ui.QDialogButtonBox).button(
+            settings_ui.QDialogButtonBox.StandardButton.Save)
+        QTest.mouseClick(save, Qt.MouseButton.LeftButton)
+        self.assertEqual(cfg.Config()["transcribe_model"],
+                         "my-selected-transcription-model")
+        self.assertTrue(window.isVisible())
+
     def test_save_stays_on_screen_at_low_logical_height(self):
         with mock.patch.object(cfg.Config, "transcribe_ready", return_value=True):
             window = self.window(cfg.Config())

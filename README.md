@@ -81,6 +81,23 @@ Windows prevents a normal process from injecting input into an elevated process.
 
 Meeting capture uses Windows WASAPI loopback for speaker output. It normally needs no separate permission. Protected/DRM audio and some exclusive-mode devices may not expose a loopback stream.
 
+## Interface
+
+The settings window uses a Hex-inspired sidebar with all nine existing sections.
+Select a section with the mouse or the arrow keys while the sidebar has focus.
+The Save button stays below the scrolling page and keeps the window open after
+saving. The shell follows the system light/dark palette.
+
+The recording indicator uses a compact dot waveform, with separate microphone
+and speaker traces for meetings. Processing, completion, warnings and errors
+retain their existing behavior, including click-to-dismiss processing indicators
+and completion notifications. Model providers, credentials, shortcuts, recordings
+and history are unchanged by this visual update.
+
+Visual reference: [anomalyco/hex](https://github.com/anomalyco/hex), specifically
+its settings sidebar and Dot scope HUD. Reisülküttab remains a Python/PyQt6
+application; it does not adopt Hex's transcription engine or model defaults.
+
 ## Dictation workflow
 
 1. Configure **Settings → Shortcuts → Dictation**. The default Windows shortcut is `Ctrl+Alt+D`.
