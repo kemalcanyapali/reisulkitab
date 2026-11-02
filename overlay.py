@@ -7,29 +7,39 @@ from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF
 from PyQt6.QtGui import QColor, QCursor, QFont, QPainter, QPainterPath, QPen, QFontMetrics
 from PyQt6.QtWidgets import QWidget, QApplication
 
-BARS = 22
-HEIGHT = 56
+BARS = 22          # columns of dots in the scope; one per level handed over
+ROWS = 9           # rows of dots the braided traces light
+HEIGHT = 48        # the plate; the widget is larger by the shadow's PAD
 MIN_WIDTH = 210
 MAX_WIDTH = 460
 MARGIN = 28
 GAP = 10        # between two indicators sharing a corner
+PAD = 5         # room around the plate for its shadow
 
-BG = QColor(22, 24, 29, 238)
-BORDER = QColor(255, 255, 255, 28)
+BG = QColor(17, 17, 20, 240)        # Hex's plate: near-black at 0.94
+BORDER = QColor(255, 255, 255, 28)  # Hex's rim: white at a tenth
 TEXT = QColor(235, 237, 242)
-MUTED = QColor(150, 156, 168)
-REC = QColor(240, 78, 82)
-BUSY = QColor(120, 170, 255)
-OK = QColor(80, 205, 140)
-ERR = QColor(240, 100, 90)
+MUTED = QColor(160, 163, 172)
+
+# Hex's Dot scope palette, dark appearance: warm pearl for your voice,
+# agent blue while the agent works, coral on failure. Each entry is the pair
+# the dots blend, (base, core).
+PEARL = (QColor(219, 212, 196), QColor(250, 245, 235))
+AGENT = (QColor(179, 199, 230), QColor(235, 242, 255))
+CORAL = (QColor(255, 97, 79), QColor(255, 168, 153))
 WARN = QColor(240, 180, 80)
-THEM = QColor(110, 190, 255)   # the other side of a meeting
 
-ASK = QColor(150, 140, 255)    # recording a command rather than a dictation
-
-STATE_COLORS = {"recording": REC, "asking": ASK, "meeting": REC, "busy": BUSY,
-                "done": OK, "warning": WARN, "error": ERR}
+STATE_COLORS = {"recording": PEARL, "asking": AGENT, "meeting": PEARL,
+                "busy": AGENT, "done": PEARL, "warning": (WARN, WARN),
+                "error": CORAL}
 LIVE = ("recording", "asking", "meeting")
+
+HELIX = 1.5      # braid turns across the field, as Hex's helix cycles
+
+
+def _smoothstep(edge0, edge1, x):
+    t = min(1.0, max(0.0, (x - edge0) / (edge1 - edge0)))
+    return t * t * (3.0 - 2.0 * t)
 
 
 class Overlay(QWidget):
@@ -82,7 +92,7 @@ class Overlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.resize(MIN_WIDTH, HEIGHT)
+        self.resize(MIN_WIDTH + 2 * PAD, HEIGHT + 2 * PAD)
 
         self._anim = QTimer(self)
         self._anim.setInterval(33)
@@ -95,7 +105,7 @@ class Overlay(QWidget):
     # ---- public API --------------------------------------------------
 
     def show_recording(self, asking=False):
-        """The same ribbon either way, in a different colour when what is being
+        """The same scope either way, in a different colour when what is being
         recorded is a command for Claude rather than something to paste."""
         self.state = "asking" if asking else "recording"
         self.message = ""
@@ -219,7 +229,7 @@ class Overlay(QWidget):
             extra = 76 + (18 if self._can_dismiss else 0)
             width = max(MIN_WIDTH,
                         min(MAX_WIDTH, metrics.horizontalAdvance(self.message) + extra))
-        self.resize(width, HEIGHT)
+        self.resize(width + 2 * PAD, HEIGHT + 2 * PAD)
 
     def _reposition(self):
         # On a multi-monitor setup, show up where the user actually is.
@@ -243,7 +253,7 @@ class Overlay(QWidget):
         if self.below is not None and self.below.showing != self._stacked:
             self._reposition()
         if self.state in LIVE:
-            # keep the ribbon moving even through a pause in speech
+            # keep the scope moving even through a pause in speech
             self.levels = self.levels[1:] + [self.levels[-1] * 0.72]
         if self.state == "meeting":
             self.levels2 = self.levels2[1:] + [self.levels2[-1] * 0.72]
@@ -262,46 +272,121 @@ class Overlay(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(0.5, 0.5, self.width() - 1, self.height() - 1)
-
-        path = QPainterPath()
-        path.addRoundedRect(rect, 15, 15)
-        painter.fillPath(path, BG)
-        painter.setPen(QPen(BORDER, 1))
-        painter.drawPath(path)
-
-        accent = STATE_COLORS.get(self.state, MUTED)
-        self._draw_indicator(painter, accent)
+        pair = STATE_COLORS.get(self.state, (MUTED, MUTED))
+        self._draw_plate(painter)
 
         if self.state in LIVE:
-            self._draw_waveform(painter, accent)
+            self._draw_scope(painter, pair)
             self._draw_time(painter)
         else:
+            self._draw_indicator(painter, pair[0])
             self._draw_message(painter)
             if self._can_dismiss:
                 self._draw_dismiss(painter)
 
-    def _draw_indicator(self, painter, accent):
-        cx, cy = 26.0, self.height() / 2
+    def _draw_plate(self, painter):
+        """Hex's plate: a near-black pill floating on a soft shadow, rimmed
+        with white at a tenth."""
+        rect = QRectF(PAD + 0.5, PAD + 0.5, self.width() - 2 * PAD - 1,
+                      self.height() - 2 * PAD - 1)
+        radius = rect.height() / 2
+        shadow = QPainterPath()
+        shadow.addRoundedRect(rect.translated(0.0, 2.5), radius, radius)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        for width_, alpha in ((7.0, 26), (4.0, 36), (1.5, 52)):
+            painter.setPen(QPen(QColor(0, 0, 0, alpha), width_))
+            painter.drawPath(shadow)
+        plate = QPainterPath()
+        plate.addRoundedRect(rect, radius, radius)
+        painter.fillPath(plate, BG)
+        painter.setPen(QPen(BORDER, 1))
+        painter.drawPath(plate)
+
+    def _scope_span(self):
+        """Where the dot field runs, leaving the clock its side. A meeting's
+        clock carries an hours field, so the field stops earlier."""
+        right = self.width() - PAD - (80.0 if self.state == "meeting" else 64.0)
+        return PAD + 15.0, right
+
+    def _draw_scope(self, painter, pair):
+        """The mic, as Hex's Dot scope: a field of dots lit by a braided pair
+        of traces that follow the voice and keep turning through a pause.
+        There is no separate status dot; the field moving is the statement
+        that the microphone is live."""
+        if self.state == "meeting":
+            self._draw_dual_scope(painter)
+            return
+        self._braid_dots(painter, self.levels, pair,
+                         PAD + 5.0, self.height() - PAD - 5.0,
+                         self._phase * 1.1, ROWS)
+
+    def _draw_dual_scope(self, painter):
+        """Your microphone above the line, what the speakers play below it.
+
+        Seeing both move is the whole check that a meeting is being captured
+        properly: one silent half means that side is not reaching the
+        recording. Yours is the pearl voice, theirs the agent's blue.
+        """
+        mid = self.height() / 2
+        halves = ((self.levels, PEARL, 0.0, PAD + 4.0, mid - 1.5),
+                  (self.levels2, AGENT, math.pi / 2, mid + 1.5,
+                   self.height() - PAD - 4.0))
+        for levels, pair, turn, top, bottom in halves:
+            self._braid_dots(painter, levels, pair, top, bottom,
+                             self._phase * 1.1 + turn, 5)
+
+    def _braid_dots(self, painter, levels, pair, top, bottom, phase, rows):
+        """One field: every column carries its level, two sine traces out of
+        phase braid across them, and each dot lights by how near a trace
+        passes. Older columns sit dimmer, the phosphor tail."""
+        left, right = self._scope_span()
+        mid = (top + bottom) / 2
+        pitch = (bottom - top) / (rows - 1)
         painter.setPen(Qt.PenStyle.NoPen)
-        if self.state in LIVE:
-            pulse = 0.62 + 0.38 * (0.5 + 0.5 * math.sin(self._phase * 1.6))
-            glow = QColor(accent)
-            glow.setAlphaF(0.22 * pulse)
-            painter.setBrush(glow)
-            painter.drawEllipse(QPointF(cx, cy), 13 * pulse, 13 * pulse)
-            painter.setBrush(accent)
-            painter.drawEllipse(QPointF(cx, cy), 5.5, 5.5)
-        elif self.state == "busy":
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            pen = QPen(QColor(accent), 2.4)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            painter.setPen(pen)
-            span = 100 * 16
-            start = int(-self._phase * 320) % (360 * 16)
-            painter.drawArc(QRectF(cx - 8, cy - 8, 16, 16), start, span)
-        elif self.state == "done":
-            pen = QPen(accent, 2.4)
+        base, core = pair
+        for i, level in enumerate(levels):
+            shaped = min(1.0, level ** 0.55)
+            x = left + (right - left) * i / (BARS - 1)
+            amp = (0.10 + 0.90 * shaped) * (bottom - top) / 2
+            turn = math.tau * HELIX * i / (BARS - 1) - phase
+            y1 = mid + amp * math.sin(turn)
+            y2 = mid + amp * 0.92 * math.sin(turn + math.pi * 0.85)
+            fresh = 0.45 + 0.55 * i / (BARS - 1)
+            for j in range(rows):
+                cy = top + pitch * j
+                near = min(abs(cy - y1), abs(cy - y2))
+                power = math.exp(-((near / 1.15) ** 2)) * shaped * fresh
+                edge = abs(cy - mid) / ((bottom - top) / 2)
+                self._dot(painter, x, cy, power, pitch, base, core, edge)
+
+    @staticmethod
+    def _dot(painter, x, y, power, pitch, base, core, edge):
+        """One dot as Hex draws it: a faint floor of unlit grid, brightness
+        on a power curve, a hot core colour, and a halo on the brightest."""
+        floor = 0.10 * (1.0 - 0.7 * _smoothstep(0.35, 0.95, edge))
+        alpha = floor + (0.96 - floor) * power ** 0.85
+        heat = power * power
+        colour = QColor(int(base.red() + (core.red() - base.red()) * heat),
+                        int(base.green() + (core.green() - base.green()) * heat),
+                        int(base.blue() + (core.blue() - base.blue()) * heat))
+        radius = pitch * (0.25 + 0.17 * power ** 0.6)
+        if power > 0.5:
+            halo = QColor(colour)
+            halo.setAlphaF(0.13 * power * power)
+            painter.setBrush(halo)
+            painter.drawEllipse(QPointF(x, y), radius * 2.0, radius * 2.0)
+        colour.setAlphaF(min(1.0, alpha))
+        painter.setBrush(colour)
+        painter.drawEllipse(QPointF(x, y), radius, radius)
+
+    def _draw_indicator(self, painter, colour):
+        cx, cy = 26.0, self.height() / 2
+        if self.state == "busy":
+            self._draw_flow(painter, cx, cy)
+            return
+        painter.setPen(Qt.PenStyle.NoPen)
+        if self.state == "done":
+            pen = QPen(colour, 2.4)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
@@ -309,68 +394,30 @@ class Overlay(QWidget):
                 QPointF(cx - 7, cy), QPointF(cx - 2, cy + 5.5), QPointF(cx + 7.5, cy - 6)
             )
         elif self.state == "warning":
-            pen = QPen(accent, 2.6)
+            pen = QPen(colour, 2.6)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen)
             painter.drawLine(QPointF(cx, cy - 7), QPointF(cx, cy + 1.5))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(accent)
+            painter.setBrush(colour)
             painter.drawEllipse(QPointF(cx, cy + 6), 1.5, 1.5)
         else:  # error
-            pen = QPen(accent, 2.4)
+            pen = QPen(colour, 2.4)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen)
             painter.drawLine(QPointF(cx - 6, cy - 6), QPointF(cx + 6, cy + 6))
             painter.drawLine(QPointF(cx + 6, cy - 6), QPointF(cx - 6, cy + 6))
 
-    def _bars(self):
-        """(x of the first bar, bar width, distance between two bars)."""
-        # A meeting's clock carries an hours field, so it needs more room and
-        # the ribbon has to stop earlier.
-        left = 46.0
-        right = self.width() - (74.0 if self.state == "meeting" else 58.0)
-        bar_w = 2.6
-        gap = (right - left - BARS * bar_w) / max(1, BARS - 1)
-        return left, bar_w, bar_w + gap
-
-    @staticmethod
-    def _bar_colour(shaped, accent):
-        color = QColor(accent if shaped > 0.04 else MUTED)
-        color.setAlphaF(0.35 + 0.65 * min(1.0, shaped * 2.2))
-        return color
-
-    def _draw_waveform(self, painter, accent=REC):
-        if self.state == "meeting":
-            self._draw_dual_waveform(painter)
-            return
-        left, bar_w, step = self._bars()
-        mid = self.height() / 2
+    def _draw_flow(self, painter, cx, cy):
+        """Busy, as Hex's Flow: the resting dots stay put and light travels
+        left to right through them while the agent works."""
         painter.setPen(Qt.PenStyle.NoPen)
-        for i, level in enumerate(self.levels):
-            shaped = min(1.0, level ** 0.55)
-            h = 3.0 + shaped * 26.0
-            painter.setBrush(self._bar_colour(shaped, accent))
-            painter.drawRoundedRect(
-                QRectF(left + i * step, mid - h / 2, bar_w, h), 1.3, 1.3
-            )
-
-    def _draw_dual_waveform(self, painter):
-        """Your microphone above the line, what the speakers play below it.
-
-        Seeing both move is the whole check that a meeting is being captured
-        properly: one silent half means that side is not reaching the recording.
-        """
-        left, bar_w, step = self._bars()
-        mid = self.height() / 2
-        painter.setPen(Qt.PenStyle.NoPen)
-        for i, (mine, theirs) in enumerate(zip(self.levels, self.levels2)):
-            x = left + i * step
-            for level, accent, up in ((mine, REC, True), (theirs, THEM, False)):
-                shaped = min(1.0, level ** 0.55)
-                h = 2.0 + shaped * 12.0
-                y = mid - 1.5 - h if up else mid + 1.5
-                painter.setBrush(self._bar_colour(shaped, accent))
-                painter.drawRoundedRect(QRectF(x, y, bar_w, h), 1.3, 1.3)
+        head = (self._phase * 2.2) % 11.0 - 5.5
+        base, core = AGENT
+        for k in range(5):
+            x = cx - 11.0 + k * 5.5
+            power = 0.12 + 0.88 * math.exp(-(((x - cx - head) / 3.2) ** 2))
+            self._dot(painter, x, cy, power, 4.2, base, core, 0.0)
 
     def _draw_time(self, painter):
         font = QFont(self.font())
@@ -405,7 +452,7 @@ class Overlay(QWidget):
 
     def _draw_message(self, painter):
         painter.setFont(self._label_font())
-        painter.setPen({"error": ERR, "warning": WARN}.get(self.state, TEXT))
+        painter.setPen({"error": CORAL[0], "warning": WARN}.get(self.state, TEXT))
         # Leave the cross its corner rather than running the text under it.
         box = QRectF(46, 0, self.width() - 60 - (18 if self._can_dismiss else 0),
                      self.height())

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-02T08:54:39Z",
+  "title": "Design System: Reisülküttab",
+  "extensions": {
+    "typographyMeta": {
+      "body": {
+        "displayName": "Native body text",
+        "purpose": "Qt system font and user-configured size; not a fixed web typography scale."
+      }
+    },
+    "shadows": [
+      {
+        "name": "overlay-plate",
+        "value": "QPainter rounded-rectangle strokes: widths 7, 4, 1.5; alpha 26, 36, 52; vertical offset 2.5",
+        "purpose": "Only the overlay uses this shadow. These are native painter values, not CSS box-shadow equivalents."
+      }
+    ],
+    "motion": [
+      {
+        "name": "overlay-timer",
+        "value": "33ms",
+        "purpose": "Existing QTimer drives the dot waveform and busy indicator; settings changes are instant."
+      },
+      {
+        "name": "outcome-dismissal",
+        "value": "done 2000ms; warning 9000ms; error 6000ms",
+        "purpose": "Existing default outcome durations; callers can provide a different duration."
+      }
+    ]
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "The Quiet Field",
+    "overview": "A native Windows (PyQt6) shell with a flat navigation rail, one rounded content surface, fine borders and system typography. Custom shell surfaces are neutral; native inputs retain the Windows accent color. The recording overlay is a near-black pill with a dot waveform and semantic state colors.",
+    "keyCharacteristics": [
+      "Two-pane shell: rail of nine pages + one content card; hairline borders; zero shadows.",
+      "Neutral custom shell surfaces; native controls keep the system accent.",
+      "Follows the OS scheme (sheet rebuilt on ApplicationPaletteChange); input controls stay native."
+    ],
+    "rules": [
+      {
+        "name": "Native platform boundary",
+        "body": "This is QSS and QPainter, not HTML/CSS. Web component previews are deliberately omitted; DESIGN.md and the native sources document the actual components. No synthesized tonal ramps are application tokens.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Preserve native inputs, keyboard navigation and system palette changes."
+    ],
+    "donts": [
+      "Do not change model or backend behavior as part of visual styling."
+    ]
+  }
+}

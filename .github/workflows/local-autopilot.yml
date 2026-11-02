@@ -1,0 +1,70 @@
+name: Repository AI policy
+
+on:
+  workflow_call:
+    inputs:
+      validation-command:
+        type: string
+        required: true
+    secrets:
+      token:
+        required: true
+
+jobs:
+  policy:
+    name: AI policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      review: ${{ steps.policy.outputs.requires_review }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: policy
+        env:
+          BASE: ${{ github.event.repository.default_branch }}
+        run: python .github/ai_policy.py --base "origin/$BASE" --output "$GITHUB_OUTPUT"
+      - name: Repository validation
+        run: ${{ inputs.validation-command }}
+
+  pull-request:
+    name: Open and queue pull request
+    needs: policy
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/ai/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.token }}
+      GH_REPO: ${{ github.repository }}
+      BRANCH: ${{ github.ref_name }}
+      BASE: ${{ github.event.repository.default_branch }}
+      REVIEW: ${{ needs.policy.outputs.review }}
+    steps:
+      - name: Open or locate pull request
+        id: pr
+        run: |
+          number=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number')
+          if [ -z "$number" ]; then
+            gh pr create --head "$BRANCH" --base "$BASE" --title "$BRANCH" --body 'Repository policy and validation passed.'
+            number=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number')
+          fi
+          test -n "$number"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+      - name: Require review for sensitive changes
+        if: env.REVIEW == 'true'
+        env:
+          NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          gh label create ai-needs-review --color B60205 --description 'Sensitive change requiring explicit review' --force
+          gh pr edit "$NUMBER" --add-label ai-needs-review
+      - name: Queue reviewed-safe changes
+        if: env.REVIEW != 'true'
+        env:
+          NUMBER: ${{ steps.pr.outputs.number }}
+        run: gh pr merge "$NUMBER" --auto --squash --delete-branch

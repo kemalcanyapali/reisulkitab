@@ -180,7 +180,8 @@ TR = {
     "Skip silent recordings (don't call the API)":
         "Sessiz kayıtları atla (API'ye gönderme)",
     "Silence threshold": "Sessizlik eşiği",
-    "Keep audio files ({path})": "Ses kayıtlarını sakla ({path})",
+    "Keep audio files": "Ses kayıtlarını sakla",
+    "Settings sections": "Ayar bölümleri",
 
     # --- settings: api --------------------------------------------------
     "Keys": "Anahtarlar",

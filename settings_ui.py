@@ -12,7 +12,8 @@ from PyQt6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMenu, QMessageBox, QPlainTextEdit,
-    QPushButton, QScrollArea, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QSizePolicy, QSpinBox, QTabWidget, QVBoxLayout,
+    QWidget,
 )
 
 import api
@@ -26,6 +27,7 @@ import hotkey
 import ipc
 import meeting
 import paste
+import ui_theme
 from filetranscribe import FileTranscriber
 from i18n import t
 
@@ -127,6 +129,10 @@ MAC_SHORTCUTS = [
 ]
 AUDIO_FILTER = ("*.mp3 *.wav *.m4a *.ogg *.opus *.flac *.aac *.wma "
                 "*.mp4 *.mkv *.webm *.mov *.avi")
+# The rail's icons, in tab order: one drawn glyph per section, matched to
+# the addTab calls by position.
+_NAV_KINDS = ("general", "models", "rules", "agent", "meeting", "minutes",
+              "file", "shortcuts", "history")
 
 
 class LocalModelBox(QGroupBox):
@@ -490,12 +496,12 @@ class SettingsWindow(QDialog):
         self._tracked_screen = None
         screen = self._screen_for_open()
         if screen is None:
-            self.resize(680, 640)
+            self.resize(860, 680)
         else:
             available = screen.availableGeometry()
             self.resize(
-                max(1, min(680, available.width() - 40)),
-                max(1, min(640, available.height() - 80)),
+                max(1, min(860, available.width() - 40)),
+                max(1, min(680, available.height() - 80)),
             )
 
         tabs = self.tabs = QTabWidget(self)
@@ -517,9 +523,54 @@ class SettingsWindow(QDialog):
         buttons.button(QDialogButtonBox.StandardButton.Save).setText(t("Save"))
         buttons.accepted.connect(self._save)
 
-        layout = QVBoxLayout(self)
-        layout.addWidget(tabs)
-        layout.addWidget(buttons)
+        # The Hex shell: the tab bar hides and a rail of page names does the
+        # choosing, while the QTabWidget keeps doing the paging, so its public
+        # face (the nine indices, api_tab_index, setCurrentIndex) is unchanged.
+        # A hidden bar still answers height questions, and a heading-sized
+        # label answers width ones; both would outvote the pages on a small
+        # screen. The pages scroll, so they take the squeeze instead.
+        tabs.tabBar().hide()
+        tabs.tabBar().setFixedHeight(0)
+        tabs.setSizePolicy(QSizePolicy.Policy.Expanding,
+                           QSizePolicy.Policy.Ignored)
+        nav = self.nav = QListWidget()
+        nav.setObjectName("settingsNav")
+        # A page name that outgrows the rail is elided, never scrolled: a
+        # scrollbar under a navigation rail is noise.
+        nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        for index, kind in enumerate(_NAV_KINDS):
+            nav.addItem(QListWidgetItem(ui_theme.nav_icon(kind),
+                                        tabs.tabText(index)))
+        nav.setCurrentRow(tabs.currentIndex())
+        nav.currentRowChanged.connect(tabs.setCurrentIndex)
+        tabs.currentChanged.connect(self._page_changed)
+
+        self.heading = QLabel(tabs.tabText(tabs.currentIndex()))
+        self.heading.setObjectName("settingsHeading")
+        self.heading.setSizePolicy(QSizePolicy.Policy.Ignored,
+                                   QSizePolicy.Policy.Preferred)
+        content = QWidget()
+        content.setObjectName("settingsContent")
+        inner = QVBoxLayout(content)
+        inner.setContentsMargins(18, 12, 18, 12)
+        inner.setSpacing(8)
+        inner.addWidget(self.heading)
+        inner.addWidget(tabs, 1)
+        inner.addWidget(buttons)
+
+        # The rail gives up its width before the content does, so a small
+        # screen keeps the form column; a wide one gets the full 184px rail.
+        nav.setMaximumWidth(184)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(9, 9, 9, 9)
+        layout.setSpacing(9)
+        layout.addWidget(nav)
+        layout.addWidget(content, 1)
+        ui_theme.apply(self)
+        nav.setAccessibleName(t("Settings sections"))
+        # The rail comes first in the chain; pages not on screen are skipped
+        # by Tab anyway, so this one pair orders every page the same way.
+        QWidget.setTabOrder(nav, self.ui_language)
 
         self._models_loaded.connect(self._on_models_loaded)
         self._transcribe_models_loaded.connect(self._on_transcribe_models_loaded)
@@ -628,6 +679,11 @@ class SettingsWindow(QDialog):
 
     # ---- tabs ----------------------------------------------------------
 
+    def _page_changed(self, index):
+        """Keep the rail and the heading on the page the tabs are showing."""
+        self.nav.setCurrentRow(index)
+        self.heading.setText(self.tabs.tabText(index))
+
     @staticmethod
     def _scrollable(page):
         area = QScrollArea()
@@ -710,9 +766,10 @@ class SettingsWindow(QDialog):
         )
         form.addRow("", self.filter_hallucinations)
 
-        self.keep_audio = QCheckBox(
-            t("Keep audio files ({path})", path=str(cfg.RECORDINGS_DIR))
-        )
+        self.keep_audio = QCheckBox(t("Keep audio files"))
+        # The label stays short so the row cannot outvote the form's width;
+        # the directory itself is one hover away.
+        self.keep_audio.setToolTip(str(cfg.RECORDINGS_DIR))
         form.addRow("", self.keep_audio)
         return page
 
