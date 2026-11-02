@@ -789,12 +789,43 @@ class Overlay(AppTest):
         widget.push_levels(0.4, 0.7)
         self.assertTrue(widget.showing)
 
-    def test_every_corner_is_understood(self):
-        for corner in ("top-left", "top-right", "bottom-left", "bottom-right"):
-            with self.subTest(corner=corner):
+    def test_positions_stay_on_the_pointer_screen_including_negative_origins(self):
+        from PyQt6.QtCore import QRect
+        area = QRect(-1920, -200, 1920, 1080)
+        screen = types.SimpleNamespace(availableGeometry=lambda: area)
+        for corner in settings_ui.CORNERS:
+            with self.subTest(corner=corner), mock.patch.object(
+                    overlay_module.QApplication, "screenAt", return_value=screen):
                 widget = self.overlay(corner=corner)
-                widget.show_recording()
-                widget._reposition()
+                for show in (widget.show_recording,
+                             lambda: widget.show_busy("Transcribing…"),
+                             lambda: widget.show_error("No microphone")):
+                    show()
+                    geometry = widget.geometry()
+                    self.assertTrue(area.contains(geometry))
+                    if "center" in corner:
+                        self.assertLessEqual(abs(geometry.center().x() - area.center().x()), 1)
+                    elif "left" in corner:
+                        self.assertEqual(geometry.left(), area.left() + overlay_module.MARGIN)
+                    else:
+                        self.assertEqual(geometry.x(), area.right() - widget.width() - overlay_module.MARGIN)
+                    if "top" in corner:
+                        self.assertEqual(geometry.top(), area.top() + overlay_module.MARGIN)
+                    else:
+                        self.assertEqual(geometry.y(), area.bottom() - widget.height() - overlay_module.MARGIN)
+
+    def test_compact_dictation_does_not_compress_meetings_or_errors(self):
+        widget = self.overlay()
+        widget.show_recording()
+        self.assertEqual((widget.width(), widget.height()), (122, 36))
+        widget.show_busy("Transcribing…")
+        self.assertEqual((widget.width(), widget.height()), (86, 36))
+        widget.show_meeting()
+        self.assertGreater(widget.width(), 122)
+        self.assertGreater(widget.height(), 36)
+        widget.show_error("No microphone is available")
+        self.assertGreater(widget.width(), 122)
+        self.assertEqual(widget.accessibleName(), "No microphone is available")
 
     def test_a_warning_and_an_error_both_show(self):
         widget = self.overlay()

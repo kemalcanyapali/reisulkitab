@@ -1,4 +1,4 @@
-"""The small recording indicator that appears in a screen corner without taking focus."""
+"""Focus-free recording HUD, with Hex's compact dot scope for dictation."""
 
 import math
 import sys
@@ -6,6 +6,8 @@ import sys
 from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF
 from PyQt6.QtGui import QColor, QCursor, QFont, QPainter, QPainterPath, QPen, QFontMetrics
 from PyQt6.QtWidgets import QWidget, QApplication
+
+from i18n import t
 
 BARS = 22          # columns of dots in the scope; one per level handed over
 ROWS = 9           # rows of dots the braided traces light
@@ -15,6 +17,11 @@ MAX_WIDTH = 460
 MARGIN = 28
 GAP = 10        # between two indicators sharing a corner
 PAD = 5         # room around the plate for its shadow
+SCOPE_WIDTH = 112
+WORK_WIDTH = 76
+SCOPE_HEIGHT = 26
+SCOPE_COLUMNS = 43
+SCOPE_PITCH = 2.6
 
 BG = QColor(17, 17, 20, 240)        # Hex's plate: near-black at 0.94
 BORDER = QColor(255, 255, 255, 28)  # Hex's rim: white at a tenth
@@ -34,7 +41,7 @@ STATE_COLORS = {"recording": PEARL, "asking": AGENT, "meeting": PEARL,
                 "error": CORAL}
 LIVE = ("recording", "asking", "meeting")
 
-HELIX = 1.5      # braid turns across the field, as Hex's helix cycles
+HELIX = 1.6
 
 
 def _smoothstep(edge0, edge1, x):
@@ -47,7 +54,7 @@ class Overlay(QWidget):
     of covering it, which is what lets a dictation and a command to the agent be
     under way at the same time and still both be visible."""
 
-    def __init__(self, corner="bottom-left", below=None, dismissable=False):
+    def __init__(self, corner="bottom-center", below=None, dismissable=False):
         super().__init__(None)
         self.corner = corner
         self.below = below
@@ -186,6 +193,8 @@ class Overlay(QWidget):
     # ---- internals -----------------------------------------------------
 
     def _appear(self):
+        self.setAccessibleName(self.message or (
+            t("Recording") if self.state in LIVE else self.state))
         self._resize_to_content()
         self._reposition()
         if not self.isVisible():
@@ -220,7 +229,16 @@ class Overlay(QWidget):
         if self.dismissable:
             self.resize(1, 1)
 
+    @property
+    def _compact(self):
+        return (self.state in ("recording", "asking")
+                or (self.state == "busy" and not self.dismissable))
+
     def _resize_to_content(self):
+        if self._compact:
+            width = WORK_WIDTH if self.state == "busy" else SCOPE_WIDTH
+            self.resize(width + 2 * PAD, SCOPE_HEIGHT + 2 * PAD)
+            return
         if self.state in LIVE:
             # A meeting runs long enough to need an hours field.
             width = MIN_WIDTH + (24 if self.state == "meeting" else 0)
@@ -242,6 +260,8 @@ class Overlay(QWidget):
         # screen rather than off it.
         step = (self.below.height() + GAP) if self._stacked else 0
         x = area.left() + MARGIN if left else area.right() - self.width() - MARGIN
+        if "center" in self.corner:
+            x = area.left() + (area.width() - self.width()) / 2
         y = (area.top() + MARGIN + step if top
              else area.bottom() - self.height() - MARGIN - step)
         self.move(int(x), int(y))
@@ -273,9 +293,12 @@ class Overlay(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         pair = STATE_COLORS.get(self.state, (MUTED, MUTED))
-        self._draw_plate(painter)
+        plate = self._draw_plate(painter)
 
-        if self.state in LIVE:
+        if self._compact:
+            painter.setClipPath(plate)
+            self._draw_scope(painter, pair)
+        elif self.state in LIVE:
             self._draw_scope(painter, pair)
             self._draw_time(painter)
         else:
@@ -301,10 +324,15 @@ class Overlay(QWidget):
         painter.fillPath(plate, BG)
         painter.setPen(QPen(BORDER, 1))
         painter.drawPath(plate)
+        return plate
 
     def _scope_span(self):
         """Where the dot field runs, leaving the clock its side. A meeting's
         clock carries an hours field, so the field stops earlier."""
+        if self._compact:
+            span = min((SCOPE_COLUMNS - 1) * SCOPE_PITCH,
+                       self.width() - 2 * PAD - 4)
+            return (self.width() - span) / 2, (self.width() + span) / 2
         right = self.width() - PAD - (80.0 if self.state == "meeting" else 64.0)
         return PAD + 15.0, right
 
@@ -316,8 +344,9 @@ class Overlay(QWidget):
         if self.state == "meeting":
             self._draw_dual_scope(painter)
             return
+        half = (ROWS - 1) * SCOPE_PITCH / 2
         self._braid_dots(painter, self.levels, pair,
-                         PAD + 5.0, self.height() - PAD - 5.0,
+                         self.height() / 2 - half, self.height() / 2 + half,
                          self._phase * 1.1, ROWS)
 
     def _draw_dual_scope(self, painter):
@@ -344,14 +373,21 @@ class Overlay(QWidget):
         pitch = (bottom - top) / (rows - 1)
         painter.setPen(Qt.PenStyle.NoPen)
         base, core = pair
-        for i, level in enumerate(levels):
+        columns = SCOPE_COLUMNS if self._compact else BARS
+        for i in range(columns):
+            position = i / (columns - 1)
+            level = levels[-1 - abs(i - columns // 2)] if self._compact else levels[i]
             shaped = min(1.0, level ** 0.55)
-            x = left + (right - left) * i / (BARS - 1)
+            x = left + (right - left) * position
+            if self.state == "busy":
+                head = (self._phase * 0.35) % 1.7 - 0.35
+                shaped = 0.16 + 0.84 * math.exp(-((position - head) / 0.18) ** 2)
             amp = (0.10 + 0.90 * shaped) * (bottom - top) / 2
-            turn = math.tau * HELIX * i / (BARS - 1) - phase
+            turn = math.tau * HELIX * position - phase
             y1 = mid + amp * math.sin(turn)
             y2 = mid + amp * 0.92 * math.sin(turn + math.pi * 0.85)
-            fresh = 0.45 + 0.55 * i / (BARS - 1)
+            fresh = (1.0 - 0.55 * abs(2 * position - 1)
+                     if self._compact else 0.45 + 0.55 * position)
             for j in range(rows):
                 cy = top + pitch * j
                 near = min(abs(cy - y1), abs(cy - y2))
