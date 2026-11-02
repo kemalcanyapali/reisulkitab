@@ -321,7 +321,7 @@ class GnomeShortcut(AppTest):
 
     def test_each_verb_gets_its_own_path(self):
         self.assertNotEqual(hotkey._gnome_path(hotkey.DESKTOP_ID),
-                            hotkey._gnome_path(hotkey.ASK_DESKTOP_ID))
+                            hotkey._gnome_path(hotkey.MEETING_DESKTOP_ID))
 
     def test_a_shortcut_gnome_cannot_express(self):
         with self.gsettings():
@@ -377,11 +377,11 @@ class KdeShortcut(AppTest):
     def test_the_shortcut_is_registered_under_the_desktop_id(self):
         with mock.patch.object(subprocess, "run",
                                return_value=FakeCompleted()) as run:
-            hotkey.install_kde_shortcut("Meta+D", "reisulkuttab ask",
-                                        desktop_id=hotkey.ASK_DESKTOP_ID)
+            hotkey.install_kde_shortcut("Meta+D", "reisulkuttab cancel",
+                                        desktop_id=hotkey.CANCEL_DESKTOP_ID)
         cmd = run.call_args.args[0]
         self.assertEqual(cmd[0], "kwriteconfig6")
-        self.assertIn(hotkey.ASK_DESKTOP_ID, cmd)
+        self.assertIn(hotkey.CANCEL_DESKTOP_ID, cmd)
         self.assertEqual(cmd[-1], "Meta+D")
 
     def test_each_verb_gets_its_own_entry(self):

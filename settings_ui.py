@@ -17,8 +17,8 @@ from PyQt6.QtWidgets import (
 )
 
 import api
-import assistant
 import audio
+import brand
 import cleanup
 import config as cfg
 import filetranscribe
@@ -30,6 +30,7 @@ import paste
 import ui_theme
 from filetranscribe import FileTranscriber
 from i18n import t
+from updater import Updater
 
 UI_LANGUAGES = [("Automatic (system)", "auto"), ("Turkish", "tr"), ("English", "en")]
 LANGUAGES = [
@@ -74,31 +75,6 @@ MEETING_MODELS = [
     "google/gemini-3.5-flash", "google/gemini-3.1-pro-preview",
     "anthropic/claude-sonnet-5", "openai/gpt-5.4", "x-ai/grok-4.5",
 ]
-ASSISTANT_PROVIDERS = [
-    ("Claude Code", "claude"), ("Codex", "codex"), ("OpenRouter", "openrouter"),
-]
-# Aliases resolve to the newest model of that name, so they age better than an
-# id does; a full id can be typed in when a particular one is wanted.
-ASSISTANT_MODELS = ["sonnet", "opus", "haiku", "fable"]
-CODEX_MODELS = ["gpt-5.4-codex", "gpt-5.4", "o4-mini"]
-# Starting points only; the box is editable and OpenRouter has hundreds.
-ASSISTANT_OR_MODELS = [
-    "google/gemini-3.5-flash", "anthropic/claude-sonnet-5", "openai/gpt-5.4",
-    "x-ai/grok-4.5", "google/gemini-3.1-pro-preview",
-]
-# What Claude Code may do without being able to ask. It cannot ask: there is no
-# window to answer in, so a mode that would have prompted denies instead.
-PERMISSION_MODES = [
-    ("Decide on its own, with the safety checks on", "auto"),
-    ("Allow everything", "bypassPermissions"),
-    ("Only what needs no permission", "manual"),
-]
-# Codex confines the commands it runs instead of asking about them.
-CODEX_SANDBOXES = [
-    ("Read anything, write in the working directory", "workspace-write"),
-    ("Read only", "read-only"),
-    ("No sandbox at all", "danger-full-access"),
-]
 MEETING_STATUS = {
     "recorded": "waiting to be written up",
     "transcribed": "transcript ready, minutes missing",
@@ -131,7 +107,7 @@ AUDIO_FILTER = ("*.mp3 *.wav *.m4a *.ogg *.opus *.flac *.aac *.wma "
                 "*.mp4 *.mkv *.webm *.mov *.avi")
 # The rail's icons, in tab order: one drawn glyph per section, matched to
 # the addTab calls by position.
-_NAV_KINDS = ("general", "models", "rules", "agent", "meeting", "minutes",
+_NAV_KINDS = ("general", "models", "rules", "meeting", "minutes",
               "file", "shortcuts", "history")
 
 
@@ -237,6 +213,13 @@ class LocalModelBox(QGroupBox):
 
     def repository(self):
         return self.repo.currentText().strip() if self._repos is not None else ""
+
+    @property
+    def busy(self):
+        """A model or the program itself is still arriving. An update that
+        quits the application mid-download leaves a partial file behind, so
+        the updater asks before it acts."""
+        return self._downloading or not self.install_button.isEnabled()
 
     def load(self, model, repo=""):
         """Show what is stored. What else is on offer is asked for on the way up.
@@ -475,7 +458,7 @@ class SettingsWindow(QDialog):
     # Which key was tested, whether it worked, and what to write under it.
     _test_done = pyqtSignal(str, bool, str)
 
-    def __init__(self, conf, meetings=None, parent=None):
+    def __init__(self, conf, meetings=None, updater=None, parent=None):
         super().__init__(parent)
         self.conf = conf
         self.meetings = meetings
@@ -491,6 +474,10 @@ class SettingsWindow(QDialog):
         self._testers = {}
         self._shown_provider = ""
         self.transcriber = FileTranscriber(conf, self)
+        # The tray application passes the updater it shares with the whole
+        # process. Standing alone, nothing else can be running, so this
+        # window's own work is the only thing an update would cut short.
+        self.updater = updater or Updater(self._nothing_running, self)
         self.setWindowTitle(t("Reisülküttab Settings"))
         self._tracked_window = None
         self._tracked_screen = None
@@ -509,7 +496,6 @@ class SettingsWindow(QDialog):
         self.api_tab_index = tabs.addTab(
             self._scrollable(self._api_tab()), t("API and models"))
         tabs.addTab(self._scrollable(self._prompt_tab()), t("Cleanup rules"))
-        tabs.addTab(self._scrollable(self._assistant_tab()), t("Agent"))
         tabs.addTab(self._scrollable(self._meeting_tab()), t("Meeting"))
         tabs.addTab(self._scrollable(self._minutes_tab()), t("Minutes"))
         tabs.addTab(self._scrollable(self._file_tab()), t("Audio file"))
@@ -525,7 +511,7 @@ class SettingsWindow(QDialog):
 
         # The Hex shell: the tab bar hides and a rail of page names does the
         # choosing, while the QTabWidget keeps doing the paging, so its public
-        # face (the nine indices, api_tab_index, setCurrentIndex) is unchanged.
+        # face (the page indices, api_tab_index, setCurrentIndex) is unchanged.
         # A hidden bar still answers height questions, and a heading-sized
         # label answers width ones; both would outvote the pages on a small
         # screen. The pages scroll, so they take the squeeze instead.
@@ -542,7 +528,7 @@ class SettingsWindow(QDialog):
             nav.addItem(QListWidgetItem(ui_theme.nav_icon(kind),
                                         tabs.tabText(index)))
         nav.setCurrentRow(tabs.currentIndex())
-        nav.currentRowChanged.connect(tabs.setCurrentIndex)
+        nav.itemSelectionChanged.connect(self._section_selected)
         tabs.currentChanged.connect(self._page_changed)
 
         self.heading = QLabel(tabs.tabText(tabs.currentIndex()))
@@ -578,6 +564,8 @@ class SettingsWindow(QDialog):
         self.transcriber.progress.connect(self._on_file_progress)
         self.transcriber.finished.connect(self._on_file_finished)
         self.transcriber.failed.connect(self._on_file_failed)
+        self.updater.changed.connect(self._refresh_update_controls)
+        self._refresh_update_controls()
         if self.meetings is not None:
             self.meetings.progress.connect(self._on_minutes_progress)
             self.meetings.finished.connect(self._on_minutes_finished)
@@ -679,6 +667,11 @@ class SettingsWindow(QDialog):
 
     # ---- tabs ----------------------------------------------------------
 
+    def _section_selected(self):
+        selected = self.nav.selectedItems()
+        if selected:
+            self.tabs.setCurrentIndex(self.nav.row(selected[0]))
+
     def _page_changed(self, index):
         """Keep the rail and the heading on the page the tabs are showing."""
         self.nav.setCurrentRow(index)
@@ -771,6 +764,31 @@ class SettingsWindow(QDialog):
         # the directory itself is one hover away.
         self.keep_audio.setToolTip(str(cfg.RECORDINGS_DIR))
         form.addRow("", self.keep_audio)
+
+        self.update_box = QGroupBox(t("Updates"))
+        update_form = QFormLayout(self.update_box)
+        self.update_version = QLabel(brand.VERSION)
+        update_form.addRow(t("Installed version"), self.update_version)
+        self.update_status = QLabel("")
+        self.update_status.setWordWrap(True)
+        update_form.addRow(self.update_status)
+        self.update_check_button = QPushButton(t("Check for updates"))
+        self.update_check_button.clicked.connect(self._check_updates)
+        self.update_button = QPushButton(t("Update"))
+        self.update_button.clicked.connect(self._install_update)
+        self.update_button.setEnabled(False)
+        buttons_row = QHBoxLayout()
+        buttons_row.setContentsMargins(0, 0, 0, 0)
+        buttons_row.addWidget(self.update_check_button)
+        buttons_row.addWidget(self.update_button)
+        buttons_row.addStretch(1)
+        holder = QWidget()
+        holder.setLayout(buttons_row)
+        update_form.addRow(holder)
+        note = QLabel(t("Updating restarts Reisülküttab. Save your settings first."))
+        note.setWordWrap(True)
+        update_form.addRow(note)
+        form.addRow(self.update_box)
         return page
 
     def _api_tab(self):
@@ -952,179 +970,6 @@ class SettingsWindow(QDialog):
         self.transcribe_prompt = QPlainTextEdit()
         self.transcribe_prompt.setMaximumHeight(90)
         layout.addWidget(self.transcribe_prompt)
-        return page
-
-    def _assistant_tab(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        intro = QLabel(t(
-            "This shortcut records the same way dictation does, but the "
-            "transcript is not what gets pasted. It goes to an agent as a "
-            "command, and what comes back is pasted instead: the answer to a "
-            "question, or a sentence saying what was done. Claude Code and "
-            "Codex run as the session you would have opened yourself, with your "
-            "skills, your connected services and your account."
-        ))
-        intro.setWordWrap(True)
-        layout.addWidget(intro)
-
-        self.assistant_found = QLabel("")
-        self.assistant_found.setWordWrap(True)
-        layout.addWidget(self.assistant_found)
-
-        how = QGroupBox(t("How it runs"))
-        how_form = QFormLayout(how)
-        self._shortcut_row(
-            how_form, "ask", t("Shortcut"),
-            t("No global shortcut installed. The tray menu asks it too."),
-        )
-
-        self.assistant_provider = QComboBox()
-        for label, value in ASSISTANT_PROVIDERS:
-            self.assistant_provider.addItem(t(label), value)
-        self.assistant_provider.currentIndexChanged.connect(
-            self._assistant_provider_changed
-        )
-        how_form.addRow(t("Runs on"), self.assistant_provider)
-
-        self.assistant_dir = QLineEdit()
-        self.assistant_dir.setPlaceholderText(os.path.expanduser("~"))
-        browse = QPushButton(t("Choose…"))
-        browse.clicked.connect(self._choose_assistant_dir)
-        how_form.addRow(t("Working directory"),
-                        self._row(self.assistant_dir, browse))
-        dir_note = QLabel(t(
-            "The directory the command runs in, which decides which project's "
-            "instructions and files it can see. Your own skills and services "
-            "are there whichever one it is."
-        ))
-        dir_note.setWordWrap(True)
-        how_form.addRow(dir_note)
-
-        # One scale for all three: how hard to think is one thing to want, and
-        # each provider is handed the nearest rung it actually has.
-        self.assistant_reasoning = QComboBox()
-        for label, value in REASONING_LEVELS:
-            self.assistant_reasoning.addItem(t(label), value)
-        self.assistant_reasoning.setToolTip(t(
-            "More thinking is slower, and you are standing in front of the "
-            "screen while it happens. Worth it for a job that has to be worked "
-            "out rather than looked up."
-        ))
-        how_form.addRow(t("Thinking"), self.assistant_reasoning)
-
-        self.assistant_timeout = QSpinBox()
-        self.assistant_timeout.setRange(15, 3600)
-        self.assistant_timeout.setSuffix(t(" s"))
-        self.assistant_timeout.setToolTip(t(
-            "A command still running after this is given up on. The tray menu "
-            "can stop one earlier."
-        ))
-        how_form.addRow(t("Give up after"), self.assistant_timeout)
-        layout.addWidget(how)
-
-        # One box per provider, only the chosen one on screen: they have nothing
-        # in common past the model, and three sets of half-relevant fields would
-        # be worse than none.
-        self.claude_box = QGroupBox(t("Claude Code"))
-        claude_form = QFormLayout(self.claude_box)
-        self.assistant_model = QComboBox()
-        self.assistant_model.setEditable(True)
-        self.assistant_model.addItems(ASSISTANT_MODELS)
-        self.assistant_model.setToolTip(t(
-            "A name like “sonnet” always means the newest model of that line. "
-            "Opus thinks harder and answers slower, which is felt here more "
-            "than anywhere else: you are standing in front of the screen."
-        ))
-        claude_form.addRow(t("Model"), self.assistant_model)
-        self.assistant_permission = QComboBox()
-        for label, value in PERMISSION_MODES:
-            self.assistant_permission.addItem(t(label), value)
-        claude_form.addRow(t("Permissions"), self.assistant_permission)
-        layout.addWidget(self.claude_box)
-
-        self.codex_box = QGroupBox(t("Codex"))
-        codex_form = QFormLayout(self.codex_box)
-        self.assistant_codex_model = QComboBox()
-        self.assistant_codex_model.setEditable(True)
-        self.assistant_codex_model.addItem(t("Codex's own default"), "")
-        for name in CODEX_MODELS:
-            self.assistant_codex_model.addItem(name, name)
-        codex_form.addRow(t("Model"), self.assistant_codex_model)
-        self.assistant_codex_sandbox = QComboBox()
-        for label, value in CODEX_SANDBOXES:
-            self.assistant_codex_sandbox.addItem(t(label), value)
-        codex_form.addRow(t("Sandbox"), self.assistant_codex_sandbox)
-        layout.addWidget(self.codex_box)
-
-        self.openrouter_box = QGroupBox("OpenRouter")
-        or_form = QFormLayout(self.openrouter_box)
-        self.assistant_openrouter_model = QComboBox()
-        self.assistant_openrouter_model.setEditable(True)
-        self.assistant_openrouter_model.addItems(ASSISTANT_OR_MODELS)
-        or_form.addRow(t("Model"), self.assistant_openrouter_model)
-        or_note = QLabel(t(
-            "A plain question and a plain answer, over the OpenRouter key you "
-            "already have. It runs no commands, opens no files and reaches none "
-            "of your services, so it can tell you what the capital of Peru is "
-            "but not what is in your calendar. Working directory and permissions "
-            "above mean nothing here."
-        ))
-        or_note.setWordWrap(True)
-        or_form.addRow(or_note)
-        layout.addWidget(self.openrouter_box)
-
-        thread = QGroupBox(t("The conversation"))
-        thread_form = QFormLayout(thread)
-        self.assistant_session_minutes = QSpinBox()
-        self.assistant_session_minutes.setRange(0, 1440)
-        self.assistant_session_minutes.setSuffix(t(" min"))
-        self.assistant_session_minutes.setSpecialValueText(t("every command on its own"))
-        thread_form.addRow(t("Carry on for"), self.assistant_session_minutes)
-        thread_note = QLabel(t(
-            "Commands within this long of each other are one conversation, so "
-            "“and move that to Thursday” knows what “that” is. After it, the "
-            "next command starts fresh."
-        ))
-        thread_note.setWordWrap(True)
-        thread_form.addRow(thread_note)
-        reset = QPushButton(t("Start a new conversation now"))
-        reset.clicked.connect(self._reset_assistant_session)
-        self.assistant_session_status = QLabel("")
-        self.assistant_session_status.setWordWrap(True)
-        thread_form.addRow(self._row(reset), self.assistant_session_status)
-        layout.addWidget(thread)
-
-        answer = QGroupBox(t("The answer"))
-        answer_form = QFormLayout(answer)
-        self.assistant_paste = QCheckBox(t("Paste it into the focused window"))
-        self.assistant_paste.setToolTip(t(
-            "It is copied to the clipboard either way."
-        ))
-        answer_form.addRow("", self.assistant_paste)
-        self.assistant_cleanup = QCheckBox(t("Clean the transcript up before sending it"))
-        self.assistant_cleanup.setToolTip(t(
-            "Off by default: Claude reads through “erm” and “you know” without "
-            "help, and cleanup costs an API call and a second or two."
-        ))
-        answer_form.addRow("", self.assistant_cleanup)
-        layout.addWidget(answer)
-
-        prompt_label = QLabel(t(
-            "Told to the agent alongside every command, on top of whatever your "
-            "own configuration already says."
-        ))
-        prompt_label.setWordWrap(True)
-        layout.addWidget(prompt_label)
-        self.assistant_prompt = QPlainTextEdit()
-        self.assistant_prompt.setMinimumHeight(180)
-        layout.addWidget(self.assistant_prompt, 1)
-        reset_prompt = QPushButton(t("Reset to default"))
-        reset_prompt.clicked.connect(
-            lambda: self.assistant_prompt.setPlainText(cfg.default_assistant_prompt())
-        )
-        layout.addWidget(reset_prompt, 0, Qt.AlignmentFlag.AlignRight)
-
         return page
 
     def _meeting_tab(self):
@@ -1377,9 +1222,9 @@ class SettingsWindow(QDialog):
     def _shortcut_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
-        # Both keys in one form, the way the Meeting and Agent tabs already lay
-        # theirs out. Two forms would give each row a label column of its own,
-        # and two combination boxes starting at different places read as two
+        # Both keys in one form, the way the Meeting tab already lays its own
+        # out. Two forms would give each row a label column of its own, and
+        # two combination boxes starting at different places read as two
         # unrelated settings rather than the pair they are.
         form = QFormLayout()
         self._shortcut_row(
@@ -1621,23 +1466,6 @@ class SettingsWindow(QDialog):
         )
         self.transcribe_prompt.setPlainText(conf["transcribe_prompt"])
 
-        self._select_data(self.assistant_provider, conf["assistant_provider"])
-        self.assistant_model.setCurrentText(conf["assistant_model"])
-        self._select_data(self.assistant_permission, conf["assistant_permission_mode"])
-        self.assistant_codex_model.setCurrentText(conf["assistant_codex_model"])
-        self._select_data(self.assistant_codex_sandbox, conf["assistant_codex_sandbox"])
-        self.assistant_openrouter_model.setCurrentText(conf["assistant_openrouter_model"])
-        self._assistant_provider_changed()  # selecting index 0 fires no signal
-        self._select_data(self.assistant_reasoning, conf["assistant_reasoning"])
-        self.assistant_dir.setText(conf["assistant_dir"])
-        self.assistant_timeout.setValue(int(conf["assistant_timeout"]))
-        self.assistant_session_minutes.setValue(int(conf["assistant_session_minutes"]))
-        self.assistant_paste.setChecked(conf["assistant_paste"])
-        self.assistant_cleanup.setChecked(conf["assistant_cleanup"])
-        self.assistant_prompt.setPlainText(
-            conf["assistant_prompt"] or cfg.default_assistant_prompt()
-        )
-
         self._select_data(self.meeting_mic, conf["meeting_mic_target"])
         self._select_data(self.meeting_system, conf["meeting_system_target"])
         self.meeting_self_name.setText(conf["meeting_self_name"])
@@ -1666,7 +1494,6 @@ class SettingsWindow(QDialog):
 
         for which in self._shortcut_rows:
             self._refresh_shortcut_status(which)
-        self._refresh_assistant_status()
         self._load_history()
         self._load_minutes()
 
@@ -1717,33 +1544,6 @@ class SettingsWindow(QDialog):
         conf["file_cleanup_prompt"] = ("" if file_prompt == cfg.default_file_cleanup_prompt()
                                        else file_prompt)
         conf["transcribe_prompt"] = self.transcribe_prompt.toPlainText().strip()
-
-        conf["assistant_provider"] = self.assistant_provider.currentData() or "claude"
-        conf["assistant_model"] = (self.assistant_model.currentText().strip()
-                                   or cfg.DEFAULTS["assistant_model"])
-        conf["assistant_permission_mode"] = (self.assistant_permission.currentData()
-                                             or "auto")
-        # The editable box shows a label for "no choice", which must not be
-        # stored as if it were a model id.
-        codex_model = self.assistant_codex_model.currentText().strip()
-        conf["assistant_codex_model"] = (
-            "" if codex_model == t("Codex's own default") else codex_model
-        )
-        conf["assistant_codex_sandbox"] = (self.assistant_codex_sandbox.currentData()
-                                           or "workspace-write")
-        conf["assistant_openrouter_model"] = (
-            self.assistant_openrouter_model.currentText().strip()
-            or cfg.DEFAULTS["assistant_openrouter_model"]
-        )
-        conf["assistant_reasoning"] = self.assistant_reasoning.currentData() or ""
-        conf["assistant_dir"] = self.assistant_dir.text().strip()
-        conf["assistant_timeout"] = self.assistant_timeout.value()
-        conf["assistant_session_minutes"] = self.assistant_session_minutes.value()
-        conf["assistant_paste"] = self.assistant_paste.isChecked()
-        conf["assistant_cleanup"] = self.assistant_cleanup.isChecked()
-        assistant_prompt = self.assistant_prompt.toPlainText().strip()
-        conf["assistant_prompt"] = ("" if assistant_prompt == cfg.default_assistant_prompt()
-                                    else assistant_prompt)
 
         conf["meeting_mic_target"] = self.meeting_mic.currentData() or ""
         conf["meeting_system_target"] = self.meeting_system.currentData() or ""
@@ -1914,6 +1714,56 @@ class SettingsWindow(QDialog):
         button.setEnabled(True)
         answer.setText(("✓ " if ok else "✗ ") + message)
 
+    # ---- updates ---------------------------------------------------------
+
+    def _nothing_running(self):
+        """Whether an update may quit this process where it stands.
+
+        Used only when the window stands alone, without the tray application
+        to answer for the rest of the process: then this window's own work —
+        a transcription or a model still downloading — is all there is.
+        """
+        return (not self.transcriber.busy
+                and not self.local_whisper.busy and not self.local_llm.busy)
+
+    def _check_updates(self):
+        self.updater.check()
+
+    def _install_update(self):
+        self.updater.install()
+
+    def _refresh_update_controls(self):
+        """Follow the shared updater: one place for the buttons and the line."""
+        state = self.updater.state
+        # No second press while the first is still travelling, whatever it
+        # started; Update is offered only once there is something to install.
+        self.update_check_button.setEnabled(
+            state not in ("checking", "downloading", "installing"))
+        self.update_button.setEnabled(state == "available" and self.updater.supported)
+        if state == "checking":
+            text = t("Checking…")
+        elif state == "current":
+            text = t("Reisülküttab is up to date.")
+        elif state == "available":
+            if self.updater.supported and not self.updater.can_update:
+                text = t("Finish recording, transcription or downloads before updating.")
+            else:
+                text = t("Version {version} is available.",
+                         version=self.updater.latest_version)
+        elif state == "downloading":
+            text = t("Downloading version {version}…",
+                     version=self.updater.latest_version)
+        elif state == "installing":
+            text = t("Installing the update; Reisülküttab will restart.")
+        elif state == "error":
+            text = t("Update failed: {error}", error=self.updater.message)
+        else:
+            text = ""
+        if not self.updater.supported:
+            text = (text + "\n" + t(
+                "In-app updates require the standard Windows installation.")).strip()
+        self.update_status.setText(text)
+
     # ---- audio file ------------------------------------------------------
 
     def _choose_file(self):
@@ -1943,7 +1793,10 @@ class SettingsWindow(QDialog):
         self.conf.save()
 
     def _run_file(self):
-        if not getattr(self, "file_path", "") or self.transcriber.busy:
+        # Installing hands the process over to the updater right away, so no
+        # new run may start in that window.
+        if (not getattr(self, "file_path", "") or self.transcriber.busy
+                or self.updater.state == "installing"):
             return
         self.file_output.clear()
         self.file_segments = []
@@ -2091,48 +1944,6 @@ class SettingsWindow(QDialog):
                 "above.", binary=binary,
             ))
 
-    def _assistant_provider_changed(self):
-        provider = self.assistant_provider.currentData() or "claude"
-        self.claude_box.setVisible(provider == "claude")
-        self.codex_box.setVisible(provider == "codex")
-        self.openrouter_box.setVisible(provider == "openrouter")
-        self._refresh_assistant_status()
-
-    def _refresh_assistant_status(self):
-        provider = self.assistant_provider.currentData() or "claude"
-        binary = assistant.executable(provider)
-        found = shutil.which(binary) if binary else ""
-        if not binary:
-            self.assistant_found.setText(
-                t("Needs no program installed, only the OpenRouter key.")
-            )
-        elif found:
-            self.assistant_found.setText(t("Found: {path}", path=found))
-        else:
-            self.assistant_found.setText(t(
-                "{binary} is not on your PATH, so this cannot run yet. Install "
-                "it, or pick another one above.", binary=binary,
-            ))
-        age = assistant.session_age()
-        if age is None:
-            self.assistant_session_status.setText(t("No conversation going."))
-        else:
-            self.assistant_session_status.setText(
-                t("Last used {minutes} min ago.", minutes=int(age // 60))
-            )
-
-    def _reset_assistant_session(self):
-        assistant.clear_session()
-        self._refresh_assistant_status()
-
-    def _choose_assistant_dir(self):
-        chosen = QFileDialog.getExistingDirectory(
-            self, t("Working directory"),
-            self.assistant_dir.text().strip() or os.path.expanduser("~"),
-        )
-        if chosen:
-            self.assistant_dir.setText(chosen)
-
     # ---- minutes ---------------------------------------------------------
 
     def _load_minutes(self):
@@ -2174,7 +1985,8 @@ class SettingsWindow(QDialog):
 
     def _retry_minutes(self):
         row = self._selected_meeting()
-        if not row or self.meetings is None or self.meetings.busy:
+        if (not row or self.meetings is None or self.meetings.busy
+                or self.updater.state == "installing"):
             return
         # A row that already has its transcript resumes from there; only a run
         # that never got that far goes back to the audio.

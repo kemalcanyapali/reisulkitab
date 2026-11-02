@@ -515,7 +515,6 @@ class Ask(AppTest):
                 self.assertRaises(assistant.AssistantError) as caught:
             assistant.ask("hi", self.config())
         self.assertIn("claude", str(caught.exception))
-        self.assertIn("Settings", str(caught.exception))
 
     def test_a_session_that_is_gone_is_started_over_without_a_word(self):
         conf = self.config()

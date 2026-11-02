@@ -1,0 +1,58 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify stable version and merged revision
+        shell: pwsh
+        run: |
+          $version = python -c "import brand; print(brand.VERSION)"
+          if ($version -notmatch '^\d+\.\d+\.\d+$' -or $env:GITHUB_REF_NAME -cne "v$version") {
+            throw 'Tag must match the stable version in brand.py.'
+          }
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Only a revision merged into main can be released.' }
+      - name: Build Windows application
+        shell: pwsh
+        run: ./build-windows.ps1
+      - name: Run application tests
+        shell: pwsh
+        run: |
+          ./.venv/Scripts/python.exe -m unittest discover
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
+      - name: Package and checksum
+        shell: pwsh
+        run: ./package-windows.ps1
+      - name: Publish complete release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME --verify-tag --draft --title "Reisülküttab $env:GITHUB_REF_NAME" --generate-notes dist/Reisulkuttab-windows-x64.zip dist/SHA256SUMS
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed; incomplete draft is not served to the updater.' }
+          gh release edit $env:GITHUB_REF_NAME --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Publishing failed; inspect the draft before retrying.' }

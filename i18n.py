@@ -60,6 +60,16 @@ TR = {
     "Settings…": "Ayarlar…",
     "Restart": "Yeniden başlat",
     "Quit": "Çık",
+    "Check for updates": "Güncellemeleri kontrol et",
+    "Reisülküttab: a new version is available": "Reisülküttab: yeni sürüm var",
+    "Finish recording, transcription or downloads before updating.":
+        "Güncellemeden önce kaydın, yazıya çevirmenin veya indirmenin bitmesini bekle.",
+    "Downloading version {version}…": "{version} sürümü indiriliyor…",
+    "Update failed: {error}": "Güncelleme başarısız: {error}",
+    "In-app updates require the standard Windows installation.":
+        "Uygulama içinden güncelleme için standart Windows kurulumu gerekir.",
+    "{binary} not found. Install it before running this command.":
+        "{binary} bulunamadı. Bu komutu çalıştırmadan önce kur.",
     "Reisülküttab: ready": "Reisülküttab: hazır",
     "Reisülküttab: recording": "Reisülküttab: kaydediyor",
     "Reisülküttab: working": "Reisülküttab: işleniyor",
@@ -181,6 +191,16 @@ TR = {
         "Sessiz kayıtları atla (API'ye gönderme)",
     "Silence threshold": "Sessizlik eşiği",
     "Keep audio files": "Ses kayıtlarını sakla",
+    "Updates": "Güncellemeler",
+    "Installed version": "Kurulu sürüm",
+    "Update": "Güncelle",
+    "Checking…": "Kontrol ediliyor…",
+    "Reisülküttab is up to date.": "Reisülküttab güncel.",
+    "Version {version} is available.": "Sürüm {version} hazır.",
+    "Installing the update; Reisülküttab will restart.":
+        "Güncelleme kuruluyor; Reisülküttab yeniden başlayacak.",
+    "Updating restarts Reisülküttab. Save your settings first.":
+        "Güncelleme Reisülküttab'yi yeniden başlatır. Önce ayarlarını kaydet.",
     "Settings sections": "Ayar bölümleri",
 
     # --- settings: api --------------------------------------------------
@@ -306,8 +326,6 @@ TR = {
     "No global shortcut installed.": "Global kısayol kurulu değil.",
     "No global shortcut installed. The tray menu starts a meeting too.":
         "Global kısayol kurulu değil. Toplantı tepsi menüsünden de başlatılabilir.",
-    "No global shortcut installed. The tray menu asks it too.":
-        "Global kısayol kurulu değil. Tepsi menüsünden de soru sorulabilir.",
     "No global shortcut installed. The tray menu discards it too.":
         "Global kısayol kurulu değil. Kayıt tepsi menüsünden de iptal edilebilir.",
     "Start and stop": "Başlat ve bitir",
@@ -388,11 +406,6 @@ TR = {
         "Geçmişin tamamı silinsin mi? Bu geri alınamaz.",
 
     # --- asking Claude Code -------------------------------------------------
-    "Ask {name}": "{name} sor",
-    "Stop and ask {name}": "Kaydı bitir ve {name} sor",
-    "Start a new conversation": "Yeni konuşma başlat",
-    "Start a new conversation now": "Şimdi yeni konuşma başlat",
-    "Stop {name}": "{name} durdur",
     "Stopping…": "Durduruluyor…",
     "Stopped.": "Durduruldu.",
     "{name} starts fresh next time.": "{name} bir sonrakine sıfırdan başlayacak.",
@@ -414,10 +427,6 @@ TR = {
     "Planning…": "Planlıyor…",
     "Using {name}…": "{name} kullanıyor…",
     "Thinking…": "Düşünüyor…",
-    "{binary} not found. Install it, or pick another provider under "
-    "Settings → Agent.":
-        "{binary} bulunamadı. Kur ya da Ayarlar → Ajan sekmesinden başka bir "
-        "sağlayıcı seç.",
     "Could not run {binary}: {error}": "{binary} çalıştırılamadı: {error}",
     "{service} exited with code {code}.": "{service} {code} koduyla çıktı.",
     "It did not finish within {seconds} seconds.":
@@ -436,100 +445,10 @@ TR = {
     "{service} did not finish within {seconds} seconds.":
         "{service} {seconds} saniye içinde bitmedi.",
 
-    # --- settings: the agent ------------------------------------------------
-    "Agent": "Ajan",
-    "This shortcut records the same way dictation does, but the transcript is "
-    "not what gets pasted. It goes to an agent as a command, and what comes "
-    "back is pasted instead: the answer to a question, or a sentence saying "
-    "what was done. Claude Code and Codex run as the session you would have "
-    "opened yourself, with your skills, your connected services and your "
-    "account.":
-        "Bu kısayol dikte ile aynı şekilde kaydeder, ama yapıştırılan şey "
-        "transkript değildir. Transkript bir ajana komut olarak gider ve yerine "
-        "oradan döneni yapıştırılır: bir sorunun cevabı ya da ne yapıldığını "
-        "söyleyen bir cümle. Claude Code ve Codex, kendi açacağın oturumun "
-        "aynısı olarak çalışır: skill'lerinle, bağlı servislerinle ve kendi "
-        "hesabınla.",
-    "How it runs": "Nasıl çalışıyor",
+    # --- providers, and what the history calls their answers ---------------
     "Runs on": "Şunun üstünde çalışır",
-    "More thinking is slower, and you are standing in front of the screen while "
-    "it happens. Worth it for a job that has to be worked out rather than "
-    "looked up.":
-        "Daha çok düşünmek daha yavaştır ve bu sırada ekranın başında bekliyor "
-        "olursun. Bakılıp bulunacak değil, çözülmesi gereken işler için değer.",
     "Claude Code": "Claude Code",
-    "Codex": "Codex",
-    "Codex's own default": "Codex'in kendi varsayılanı",
-    "Sandbox": "Kum havuzu",
-    "Read anything, write in the working directory":
-        "Her şeyi okusun, çalışma dizinine yazsın",
-    "Read only": "Yalnızca okusun",
-    "No sandbox at all": "Kum havuzu hiç olmasın",
-    "A plain question and a plain answer, over the OpenRouter key you already "
-    "have. It runs no commands, opens no files and reaches none of your "
-    "services, so it can tell you what the capital of Peru is but not what is "
-    "in your calendar. Working directory and permissions above mean nothing "
-    "here.":
-        "Elindeki OpenRouter anahtarı üzerinden düz bir soru ve düz bir cevap. "
-        "Komut çalıştırmaz, dosya açmaz, servislerinin hiçbirine erişmez; yani "
-        "Peru'nun başkentini söyler ama takviminde ne olduğunu söyleyemez. "
-        "Yukarıdaki çalışma dizini ve izinler burada bir şey ifade etmez.",
-    "Needs no program installed, only the OpenRouter key.":
-        "Kurulu bir programa değil, yalnızca OpenRouter anahtarına ihtiyaç duyar.",
-    "{binary} is not on your PATH, so this cannot run yet. Install it, or pick "
-    "another one above.":
-        "{binary} PATH'te değil, dolayısıyla bu henüz çalışamaz. Kur ya da "
-        "yukarıdan başka birini seç.",
-    "The conversation": "Konuşma",
-    "The answer": "Cevap",
     "Found: {path}": "Bulundu: {path}",
-    "No KDE shortcut installed. The tray menu asks it too.":
-        "Kurulu KDE kısayolu yok. Tepsi menüsünden de sorulabilir.",
-    "A name like “sonnet” always means the newest model of that line. Opus "
-    "thinks harder and answers slower, which is felt here more than anywhere "
-    "else: you are standing in front of the screen.":
-        "“sonnet” gibi bir ad her zaman o serinin en yenisini seçer. Opus daha "
-        "çok düşünür ve daha geç cevaplar; bu da en çok burada hissedilir, "
-        "çünkü ekranın başında bekliyorsun.",
-    "Permissions": "İzinler",
-    "Decide on its own, with the safety checks on":
-        "Kendi karar versin, güvenlik denetimleri açık",
-    "Allow everything": "Her şeye izin ver",
-    "Only what needs no permission": "Yalnızca izin gerektirmeyenler",
-    "Working directory": "Çalışma dizini",
-    "Choose…": "Seç…",
-    "The directory the command runs in, which decides which project's "
-    "instructions and files it can see. Your own skills and services are there "
-    "whichever one it is.":
-        "Komutun içinde çalıştığı dizin; hangi projenin talimatlarını ve "
-        "dosyalarını göreceğini bu belirler. Kendi skill'lerin ve servislerin "
-        "hangi dizin olursa olsun oradadır.",
-    "Give up after": "Şu süreden sonra vazgeç",
-    "A command still running after this is given up on. The tray menu can stop "
-    "one earlier.":
-        "Bu süreden sonra hâlâ süren komuttan vazgeçilir. Tepsi menüsünden daha "
-        "erken de durdurulabilir.",
-    "Carry on for": "Şu kadar süre sürsün",
-    "every command on its own": "her komut ayrı",
-    "Commands within this long of each other are one conversation, so “and move "
-    "that to Thursday” knows what “that” is. After it, the next command starts "
-    "fresh.":
-        "Birbirinden bu kadar süre içinde gelen komutlar tek bir konuşmadır; "
-        "böylece “onu perşembeye al” dediğinde “o”nun ne olduğu bilinir. Bu "
-        "sürenin ardından bir sonraki komut sıfırdan başlar.",
-    "No conversation going.": "Süren bir konuşma yok.",
-    "Last used {minutes} min ago.": "En son {minutes} dk önce kullanıldı.",
-    "Paste it into the focused window": "Odaktaki pencereye yapıştır",
-    "It is copied to the clipboard either way.": "Panoya her hâlükârda kopyalanır.",
-    "Clean the transcript up before sending it": "Göndermeden önce transkripti temizle",
-    "Off by default: Claude reads through “erm” and “you know” without help, "
-    "and cleanup costs an API call and a second or two.":
-        "Varsayılan olarak kapalı: Claude “eee” ve “hani”yi yardımsız da okur, "
-        "temizlik ise bir API çağrısına ve bir iki saniyeye mal olur.",
-    "Told to the agent alongside every command, on top of whatever your own "
-    "configuration already says.":
-        "Her komutla birlikte ajana söylenir, kendi yapılandırmanın zaten "
-        "söylediklerinin üstüne eklenir.",
     "  ·  asked Claude: {question}": "  ·  Claude'a soruldu: {question}",
 
     # --- meetings: tray and pipeline ---------------------------------------

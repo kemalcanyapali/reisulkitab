@@ -103,3 +103,22 @@ trip in `tests/test_ui.py` is what catches only one of them being written.
 Match the surrounding code: it is plain Python with no framework, comments
 explain why rather than what, and neither the code nor the commit messages use
 an em dash.
+
+## Publishing a Windows update
+
+Change `brand.VERSION` and `version-info.txt` together in a PR. After its checks
+pass and it is merged, push a stable `vX.Y.Z` tag at that merged revision.
+`.github/workflows/release.yml` refuses mismatched versions and revisions outside
+`main`, builds on Windows/Python 3.12, runs the application tests, and packages the
+complete onedir tree with `package-windows.ps1`.
+
+The release first stays a draft while `Reisulkuttab-windows-x64.zip` and
+`SHA256SUMS` upload, then becomes the latest published release. An incomplete
+draft is never offered by the updater. If upload or publication fails, inspect
+the draft before retrying rather than overwriting an already published version.
+The app never installs prereleases or downgrades.
+
+Exercise replacement in an isolated Windows profile before publication: the old
+process must exit without being killed, the new binary must answer `--json status`
+with the expected `version`, and existing config, recordings and models must
+remain byte-identical. Keep the backup if readiness cannot be established.

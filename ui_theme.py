@@ -219,12 +219,6 @@ def _rules(p):
     p.drawLine(QPointF(12.2, 12.8), QPointF(14.8, 9.0))
 
 
-def _agent(p):
-    p.drawRoundedRect(QRectF(2, 3, 12, 8.4), 3.4, 3.4)
-    p.drawLine(QPointF(5.4, 11.4), QPointF(5.4, 14.4))
-    p.drawLine(QPointF(5.4, 14.4), QPointF(8.8, 11.4))
-
-
 def _meeting(p):
     # A calendar: two people do not survive 16px, a date block does.
     p.drawRoundedRect(QRectF(2.2, 3.4, 11.6, 10.6), 1.8, 1.8)
@@ -260,7 +254,7 @@ def _history(p):
 
 _NAV_DRAW = {
     "general": _sliders, "models": _chip, "rules": _rules,
-    "agent": _agent, "meeting": _meeting, "minutes": _minutes,
+    "meeting": _meeting, "minutes": _minutes,
     "file": _file, "shortcuts": _shortcuts, "history": _history,
 }
 # One gray that clears 3:1 against both the light and the dark rail.

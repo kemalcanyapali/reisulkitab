@@ -592,7 +592,7 @@ DEFAULTS = {
     "meeting_shortcut": "",         # empty -> tray only
 
     # --- speaking a command to an agent -------------------------------------
-    "assistant_shortcut": "",       # empty -> tray only
+    "assistant_shortcut": "",       # retained data; no desktop binding
     "assistant_provider": "claude",  # claude | codex | openrouter
     "assistant_model": "sonnet",    # Claude Code: an alias, or a full model id
     "assistant_permission_mode": "auto",
