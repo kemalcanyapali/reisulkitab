@@ -180,7 +180,9 @@ TR = {
         "macOS bu ilk gönderildiğinde Erişilebilirlik izni ister.",
     "Restore the previous clipboard after pasting":
         "Yapıştırdıktan sonra eski pano içeriğini geri koy",
-    "Indicator corner": "Gösterge köşesi",
+    "Indicator position": "Gösterge konumu",
+    "bottom-center": "alt-orta",
+    "top-center": "üst-orta",
     "bottom-left": "sol-alt",
     "bottom-right": "sağ-alt",
     "top-left": "sol-üst",

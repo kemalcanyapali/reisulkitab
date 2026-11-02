@@ -70,7 +70,7 @@ Rail ≤184px that yields width before the content does; rows ≈32px with drawn
 
 ## Shapes
 
-Descending radius ladder: card 12 → group 10 → inset 8 → button/nav 7 → tab 6; the overlay plate is a full pill (radius = height/2, 48px tall). Nav selection is a soft rounded fill, never an accent bar. Focus rings are pre-drawn transparent borders that turn `focus`, so focus moves nothing.
+Descending radius ladder: card 12 → group 10 → inset 8 → button/nav 7 → tab 6. Dictation's plate is Hex's 112×26px capsule; processing is 76×26px. Meeting and message plates remain 48px tall. Nav selection is a soft rounded fill, never an accent bar. Focus rings are pre-drawn transparent borders that turn `focus`, so focus moves nothing.
 
 ## Components
 
@@ -78,7 +78,7 @@ Descending radius ladder: card 12 → group 10 → inset 8 → button/nav 7 → 
 - **Inputs:** native, untouched — comboboxes, spinboxes, checkboxes and text fields render as Windows draws them, as the Hex reference does.
 - **Navigation:** rail rows transparent at rest in `text-2`, `hover` fill, `nav-sel` pill selected; labels elide, never scroll; the one visible tab bar repeats the pill at radius 6.
 - **Cards:** `QGroupBox` as grouped card (radius 10, 1px `border`, 600 title); a model box inside a card is an inset (radius 8, `border-soft`), never card-on-card; message boxes repaint on `card`.
-- **Dot scope overlay (signature):** frameless, focus-free pill (210–460px plate width plus 5px shadow margin per side) 28px into a screen corner, with 10px between stacked widgets. Recording uses a 22×9 pearl dot field; meetings use two 22×5 fields, pearl for microphone and blue for speaker audio. Asking uses blue; busy moves light through five dots. Done/warning/error show a check, exclamation mark or cross beside a message, with default dismissal after 2/9/6s. Motion runs on a 33ms timer; shell state changes are instant.
+- **Dot scope overlay (signature):** frameless, focus-free, click-through dictation capsule, 112×26px plus 5px shadow margin. The 43×9 pearl dot field follows real level history from the centre outward; processing uses a blue flow in a 76×26px capsule. It carries no dictation clock, as in Hex. Top/bottom centre positions join the four retained corners; existing saved positions remain valid. Meetings keep their two 22×5 microphone/speaker fields and elapsed clock on the larger plate. Dismissable jobs and done/warning/error retain readable messages and their existing dismissal behavior. Motion uses the existing 33ms timer. Visual geometry reference: anomalyco/hex `src/rune_hud/dot_scope.rs`; recording/model state machines are unchanged.
 
 ## Do's and Don'ts
 

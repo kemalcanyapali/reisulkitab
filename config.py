@@ -567,7 +567,7 @@ DEFAULTS = {
     "cancel_shortcut": "Ctrl+Alt+Space",
     "evdev_hotkey": False,
     "dictation_enabled": True,
-    "overlay_corner": "bottom-left",
+    "overlay_corner": "bottom-center",
     "keep_audio": False,
     "history_limit": 200,
     "file_timestamps": False,

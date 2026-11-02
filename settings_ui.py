@@ -37,7 +37,8 @@ LANGUAGES = [
     ("Detect automatically", "auto"), ("Turkish", "tr"), ("English", "en"),
     ("German", "de"), ("French", "fr"), ("Spanish", "es"), ("Arabic", "ar"),
 ]
-CORNERS = ["bottom-left", "bottom-right", "top-left", "top-right"]
+CORNERS = ["bottom-center", "top-center", "bottom-left", "bottom-right",
+           "top-left", "top-right"]
 # The provider box offers what config knows how to reach, this machine first.
 TRANSCRIBE_PROVIDERS = ([("This machine (whisper.cpp)", "local")]
                         + [(who.service, name)
@@ -730,7 +731,7 @@ class SettingsWindow(QDialog):
         self.corner = QComboBox()
         for value in CORNERS:
             self.corner.addItem(t(value), value)
-        form.addRow(t("Indicator corner"), self.corner)
+        form.addRow(t("Indicator position"), self.corner)
 
         self.max_seconds = QSpinBox()
         self.max_seconds.setRange(10, 3600)
@@ -1505,7 +1506,7 @@ class SettingsWindow(QDialog):
         conf["auto_paste"] = self.auto_paste.isChecked()
         conf["paste_shortcut"] = self.paste_shortcut.currentText().strip()
         conf["restore_clipboard"] = self.restore_clipboard.isChecked()
-        conf["overlay_corner"] = self.corner.currentData() or "bottom-left"
+        conf["overlay_corner"] = self.corner.currentData() or "bottom-center"
         conf["max_seconds"] = self.max_seconds.value()
         conf["skip_silent"] = self.skip_silent.isChecked()
         conf["silence_db"] = float(self.silence_db.value())
