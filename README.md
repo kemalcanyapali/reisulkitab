@@ -35,6 +35,11 @@ From version 1.1.0, open **Settings → General → Updates** (Turkish:
 **Güncellemeleri kontrol et**. When a newer release is available, choose
 **Update** / **Güncelle**. The tray also offers the update check.
 
+Version **1.1.3** enlarges the recording indicator to 150% by default and adds
+**General → Recording indicator size** (100–250%) beside the existing position
+selector. Saving applies size and position immediately and preserves them across
+restarts. Meeting and message indicators keep their existing sizes.
+
 Save any edited settings first. Checking and downloading do not block the UI.
 If recording, transcription, meeting processing or model downloads are busy,
 finish the task and click Update again. A verified installation restarts the app.
