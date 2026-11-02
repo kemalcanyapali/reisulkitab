@@ -54,6 +54,15 @@ failure instead of force-killing a process. Details are in
 `%LOCALAPPDATA%\Programs\reisulkuttab-update.log`. Do not discard that backup
 until the new version works. A retained backup blocks another replacement.
 
+Version 1.1.2 launches the update helper outside the installation directory so
+Windows can rename it. If 1.1.0 or 1.1.1 restarts the old version and the log
+says the folder is “in use”, quit the idle app from its tray, launch it once
+from PowerShell as below, then retry **Check for updates → Update**:
+
+```powershell
+Start-Process "$env:LOCALAPPDATA\Programs\reisulkuttab\Reisulkuttab.exe" -ArgumentList "--gui" -WorkingDirectory "$env:LOCALAPPDATA\Programs"
+```
+
 Older versions need this one-time manual bootstrap. Source and nonstandard
 installations can check for releases but do not replace themselves:
 

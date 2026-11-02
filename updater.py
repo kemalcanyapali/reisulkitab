@@ -585,7 +585,8 @@ class Updater(QObject):
                 "-StagedDir", str(staging), "-InstallDir", str(install),
                 "-Version", self.latest_version]
         try:
-            subprocess.Popen(argv, **windowless_options(),
+            # The helper must not hold the installation open as its working directory.
+            subprocess.Popen(argv, cwd=str(install.parent), **windowless_options(),
                              stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, close_fds=True)
