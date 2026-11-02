@@ -19,7 +19,7 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-    uses: kemalcanyapali/ai-safe-autopilot/.github/workflows/safe-autopilot.yml@v1.0.1
+    uses: ./.github/workflows/local-autopilot.yml
     with:
       validation-command: |
         sudo apt-get update

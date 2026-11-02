@@ -16,6 +16,15 @@ to run anywhere and they run on a machine with no display.
 CI runs the same command on Python 3.11 through 3.13. A pull request that turns
 it red will not be merged.
 
+The required `safe-autopilot / AI policy` check is repository-local: the
+reusable workflow in `.github/workflows/local-autopilot.yml` runs
+`.github/ai_policy.py` and the validation command. It rejects credential
+files, added secrets, dependency caches, files over 10 MiB, invalid JSON and
+whitespace errors. Workflow, policy and infrastructure changes receive
+`ai-needs-review`; only non-sensitive changes are queued automatically.
+This avoids giving a public repository access to a private policy repository.
+Do not remove the required check or bypass branch protection to merge.
+
 ## Writing one
 
 Put it in `tests/`, named after the module it covers. Inherit from
