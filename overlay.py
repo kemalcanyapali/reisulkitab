@@ -54,9 +54,10 @@ class Overlay(QWidget):
     of covering it, which is what lets a dictation and a command to the agent be
     under way at the same time and still both be visible."""
 
-    def __init__(self, corner="bottom-center", below=None, dismissable=False):
+    def __init__(self, corner="bottom-center", below=None, dismissable=False, size=150):
         super().__init__(None)
         self.corner = corner
+        self.size_percent = size
         self.below = below
         # A job that can run for ten minutes should not have to be watched for
         # ten minutes. Clicking such an indicator puts the progress away; the
@@ -237,7 +238,9 @@ class Overlay(QWidget):
     def _resize_to_content(self):
         if self._compact:
             width = WORK_WIDTH if self.state == "busy" else SCOPE_WIDTH
-            self.resize(width + 2 * PAD, SCOPE_HEIGHT + 2 * PAD)
+            scale = self.size_percent / 100
+            self.resize(round((width + 2 * PAD) * scale),
+                        round((SCOPE_HEIGHT + 2 * PAD) * scale))
             return
         if self.state in LIVE:
             # A meeting runs long enough to need an hours field.
@@ -292,6 +295,9 @@ class Overlay(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self._compact:
+            width = WORK_WIDTH if self.state == "busy" else SCOPE_WIDTH
+            painter.setWindow(0, 0, width + 2 * PAD, SCOPE_HEIGHT + 2 * PAD)
         pair = STATE_COLORS.get(self.state, (MUTED, MUTED))
         plate = self._draw_plate(painter)
 
@@ -310,8 +316,8 @@ class Overlay(QWidget):
     def _draw_plate(self, painter):
         """Hex's plate: a near-black pill floating on a soft shadow, rimmed
         with white at a tenth."""
-        rect = QRectF(PAD + 0.5, PAD + 0.5, self.width() - 2 * PAD - 1,
-                      self.height() - 2 * PAD - 1)
+        rect = QRectF(PAD + 0.5, PAD + 0.5, painter.window().width() - 2 * PAD - 1,
+                      painter.window().height() - 2 * PAD - 1)
         radius = rect.height() / 2
         shadow = QPainterPath()
         shadow.addRoundedRect(rect.translated(0.0, 2.5), radius, radius)
@@ -330,9 +336,9 @@ class Overlay(QWidget):
         """Where the dot field runs, leaving the clock its side. A meeting's
         clock carries an hours field, so the field stops earlier."""
         if self._compact:
-            span = min((SCOPE_COLUMNS - 1) * SCOPE_PITCH,
-                       self.width() - 2 * PAD - 4)
-            return (self.width() - span) / 2, (self.width() + span) / 2
+            width = (WORK_WIDTH if self.state == "busy" else SCOPE_WIDTH) + 2 * PAD
+            span = min((SCOPE_COLUMNS - 1) * SCOPE_PITCH, width - 2 * PAD - 4)
+            return (width - span) / 2, (width + span) / 2
         right = self.width() - PAD - (80.0 if self.state == "meeting" else 64.0)
         return PAD + 15.0, right
 
@@ -346,7 +352,8 @@ class Overlay(QWidget):
             return
         half = (ROWS - 1) * SCOPE_PITCH / 2
         self._braid_dots(painter, self.levels, pair,
-                         self.height() / 2 - half, self.height() / 2 + half,
+                         painter.window().height() / 2 - half,
+                         painter.window().height() / 2 + half,
                          self._phase * 1.1, ROWS)
 
     def _draw_dual_scope(self, painter):

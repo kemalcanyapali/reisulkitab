@@ -181,6 +181,7 @@ TR = {
     "Restore the previous clipboard after pasting":
         "Yapıştırdıktan sonra eski pano içeriğini geri koy",
     "Indicator position": "Gösterge konumu",
+    "Recording indicator size": "Kayıt göstergesi boyutu",
     "bottom-center": "alt-orta",
     "top-center": "üst-orta",
     "bottom-left": "sol-alt",

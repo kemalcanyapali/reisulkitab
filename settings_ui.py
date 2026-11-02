@@ -732,6 +732,11 @@ class SettingsWindow(QDialog):
         for value in CORNERS:
             self.corner.addItem(t(value), value)
         form.addRow(t("Indicator position"), self.corner)
+        self.overlay_size = QSpinBox()
+        self.overlay_size.setRange(100, 250)
+        self.overlay_size.setSingleStep(25)
+        self.overlay_size.setSuffix(" %")
+        form.addRow(t("Recording indicator size"), self.overlay_size)
 
         self.max_seconds = QSpinBox()
         self.max_seconds.setRange(10, 3600)
@@ -1434,6 +1439,7 @@ class SettingsWindow(QDialog):
         self.paste_shortcut.setCurrentText(conf["paste_shortcut"])
         self.restore_clipboard.setChecked(conf["restore_clipboard"])
         self._select_data(self.corner, conf["overlay_corner"])
+        self.overlay_size.setValue(conf["overlay_size"])
         self.max_seconds.setValue(conf["max_seconds"])
         self.skip_silent.setChecked(conf["skip_silent"])
         self.silence_db.setValue(int(conf["silence_db"]))
@@ -1507,6 +1513,7 @@ class SettingsWindow(QDialog):
         conf["paste_shortcut"] = self.paste_shortcut.currentText().strip()
         conf["restore_clipboard"] = self.restore_clipboard.isChecked()
         conf["overlay_corner"] = self.corner.currentData() or "bottom-center"
+        conf["overlay_size"] = self.overlay_size.value()
         conf["max_seconds"] = self.max_seconds.value()
         conf["skip_silent"] = self.skip_silent.isChecked()
         conf["silence_db"] = float(self.silence_db.value())
